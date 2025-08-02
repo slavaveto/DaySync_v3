@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-size: 14px; /* Размер шрифта по умолчанию */
+    line-height: 1.15; /* Высота строки по умолчанию */
+    font-family: 'Inter', Arial, sans-serif; /* Шрифт по умолчанию */
+  }
+}
+
+html.light {
+  @apply bg-light-background text-light-text;
+}
+html.dark {
+  @apply bg-dark-background text-dark-text;
+}
+
+.mobile-touch-lock {
+  touch-action: pan-x pan-y;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+html.grabbing-cursor,
+html.grabbing-cursor * {
+  cursor: grabbing !important;
+}
+html.copy-cursor,
+html.copy-cursor * {
+  cursor: copy !important;
+}
+
+
+/* Сегодняшний день (если НЕ выбран) */
+[data-today="true"]:not([data-selected="true"]) {
+  border: 2px solid #fbbf24 !important;
+}
+[data-today="true"][data-selected="true"] {
+  border: 2px solid #fbbf24 !important; /* Лёгкая жёлтая рамка вокруг primary */
+}
+.w-8.overdue-date {
+  @apply !text-danger !bg-danger-100 dark:!text-white
+}
+[data-slot="error-message"] {
+  display: none !important;
+}
+.weekend-header {
+  @apply text-primary
+}
+
+
+
+/* 📌 Размер скроллбара */
+::-webkit-scrollbar {
+  width: 8px; /* Ширина вертикального скроллбара */
+  height: 8px; /* Высота горизонтального скроллбара */
+}
+/* 📌 Трек (фон за ползунком) */
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* 📌 Ползунок (по умолчанию скрыт) */
+::-webkit-scrollbar-thumb {
+  background: transparent; /* Изначально прозрачный */
+  border-radius: 4px;
+  transition: background 0.3s ease-in-out;
+}
+/* 📌 Показывать скроллбар при наведении на контейнер */
+*:hover::-webkit-scrollbar-thumb {
+  background: #888;
+}
+/* 📌 Для Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+*:hover {
+  scrollbar-color: #888 transparent;
+}
