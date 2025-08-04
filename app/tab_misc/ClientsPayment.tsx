@@ -57,6 +57,8 @@ export const ClientsPayment = ({
         return priceInUSD;
     };
 
+
+
     const DYNAMIC_COLUMNS = isPastMonth ? [
         {key: 'name', width: 230, align: 'left' as const},
         // {key: 'price', width: 100, align: 'center' as const},
@@ -357,6 +359,73 @@ export const ClientsPayment = ({
         }
     };
 
+    // Функция для проверки сумм по строкам
+    const checkSumsByRows = () => {
+        const visibleClients = Object.values(groupedClients)
+            .flat()
+            .filter(isVisibleClient)
+            .filter(client => getAllMeetingsCount(client.id) > 0);
+
+        // Считаем суммы по строкам только для sum и paid_meetings
+        const rowSums = {
+            sum: 0,
+            paidMeetings: 0
+        };
+
+        visibleClients.forEach(client => {
+            const allMeetings = getAllMeetingsCount(client.id);
+            const paidMeetings = getPaidMeetings(client.id, selectedMonth);
+            const priceInUSD = roundPrice(client.price, client.currency, euroToUsdRate);
+            
+            // Сумма для колонки sum
+            if (!isPastMonth && client.exclude_from_calculations) {
+                // Не добавляем в сумму если не прошлый месяц и исключен из расчетов
+            } else {
+                rowSums.sum += priceInUSD * allMeetings;
+            }
+            
+            // Сумма для колонки paid_meetings
+            if (client.pay_per_session) {
+                rowSums.paidMeetings += priceInUSD * allMeetings;
+            } else {
+                rowSums.paidMeetings += priceInUSD * paidMeetings;
+            }
+        });
+
+        // Считаем суммы в header (ваши существующие функции)
+        const headerSums = {
+            sum: isPastMonth ? getTotalSum() : getUnpaidSum(),
+            paidMeetings: Object.values(groupedClients).flat().filter(isVisibleClient).filter(client => client.payment_method !== "rubles").reduce((total, client) => {
+                const paidMeetings = client.pay_per_session
+                    ? getAllMeetingsCount(client.id)
+                    : getPaidMeetings(client.id, selectedMonth);
+                const priceInUSD = roundPrice(client.price, client.currency, euroToUsdRate);
+                return total + (priceInUSD * paidMeetings);
+            }, 0)
+        };
+
+        // Сравниваем только sum и paid_meetings
+        const differences = {
+            sum: rowSums.sum - headerSums.sum,
+            paidMeetings: rowSums.paidMeetings - headerSums.paidMeetings
+        };
+
+        // Проверяем, есть ли расхождения
+        const hasDifferences = Math.abs(differences.sum) > 0.01 || Math.abs(differences.paidMeetings) > 0.01;
+        
+        if (hasDifferences) {
+            console.warn('⚠️ РАСХОЖДЕНИЯ В СУММАХ!', {
+                sum: { row: rowSums.sum, header: headerSums.sum, diff: differences.sum },
+                paidMeetings: { row: rowSums.paidMeetings, header: headerSums.paidMeetings, diff: differences.paidMeetings }
+            });
+        }
+        
+        return { rowSums, headerSums, differences, hasDifferences };
+    };
+
+    // Вызываем проверку при каждом рендере
+    const { hasDifferences } = React.useMemo(() => checkSumsByRows(), [groupedClients, selectedMonth, isPastMonth]);
+
     const allVisibleClients = useMemo(() => {
         return Object.entries(groupedClients)
             .filter(([dayName, dayClients]) => dayClients.some(isVisibleClient))
@@ -413,11 +482,15 @@ export const ClientsPayment = ({
                             {col.key === 'sum' && (isPastMonth
                                     ?
                                     <span className="!text-success-500 text-[14px]">
+                                        {hasDifferences && <span className="text-red-500 mr-1">⚠️</span>}
                                         {getTotalSum()} $
                                     </span>
                                     : (
                                         <div className="text-center !text-danger-500">
-                                            <div className="">{getUnpaidSum()} $</div>
+                                            <div className="">
+                                                {hasDifferences && <span className="text-red-500 mr-1">⚠️</span>}
+                                                {getUnpaidSum()} $
+                                            </div>
                                             {/*<div className=" text-gray-500">({getTotalSum()} $)</div>*/}
                                         </div>
                                     )
@@ -516,7 +589,10 @@ export const ClientsPayment = ({
 
                                 return (
                                     <div className="text-center flex flex-row items-center gap-1">
-                                        <div className="">{totalPaidAmount} $</div>
+                                        <div className="">
+                                            {hasDifferences && <span className="text-red-500 mr-1">⚠️</span>}
+                                            {totalPaidAmount} $
+                                        </div>
                                         {/*<span className="text-[12px]">({totalPaidMeetings})</span>*/}
                                         {/*<div className="text-[12px] text-success-600">{totalPaidAmount} $</div>*/}
                                     </div>
