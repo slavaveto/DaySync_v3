@@ -1,12 +1,12 @@
 import React, {useEffect, useRef, useState} from "react";
 import {MdCloudDownload} from "react-icons/md";
 import clsx from "clsx";
-import {createAuthenticatedClient} from "@/app/init/supabaseClient";
+import {createAuthenticatedClient} from "@/app/init/dbase/supabaseClient";
 import type {ItemType} from "@/app/types";
 import {useMainContext} from "@/app/context";
 import {Spinner} from "@heroui/react";
 import {toast} from "react-hot-toast";
-import {subscribeToItems} from "@/app/init/sync/realtimeSubscription";
+import {subscribeToItems} from "@/app/init/sync2/realtimeSubscription";
 import {useDevice} from "@/app/init/providers/MobileDetect";
 import usePersistentState from "@/app/init/usePersistentState"
 import {useAuth} from '@clerk/nextjs';
@@ -170,6 +170,7 @@ export const DownloadButton = () => {
 
     useEffect(() => {
         if (!user_id) return;
+
         setupSubscription(); // ✅ подписываемся
         reloadAllItems();    // ✅ первый раз загружаем
     }, [user_id]);
@@ -745,7 +746,7 @@ export const DownloadButton = () => {
             {showButton ? (
                 <button
                     className={clsx(
-                        "transition-all duration-200 pointer-events-none opacity-50",
+                        "transition-all  duration-200 pointer-events-none opacity-50",
                         isDownloadingData
                             ? "text-default-400"
                             : wasSyncedOk

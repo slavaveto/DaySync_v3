@@ -2,11 +2,16 @@ import {toast} from "react-hot-toast";
 
 class Logger {
     private globalContext: string = '';
+    private toastsEnabled: boolean = false; // ДОБАВИЛИ настройку toast'ов
 
     // Устанавливаем контекст для всей страницы/процесса
     setContext(context: string) {
         this.globalContext = context;
-        // console.log(`📋 Контекст установлен: ${context}`);
+    }
+
+    // НОВЫЙ метод для включения/выключения toast'ов
+    setToasts(enabled: boolean) {
+        this.toastsEnabled = enabled;
     }
 
     // Получаем полный контекст
@@ -17,46 +22,85 @@ class Logger {
         return line ? `:${line}` : '';
     }
 
-    // Утилита для toast'ов (как в DownloadButton)
-    showToast(message: string, type: 'success' | 'error' | 'loading' | 'info' = 'info') {
+    clearToasts() {
+        toast.dismiss();
+        console.log('🗑️ Все toast\'ы очищены');
+    }
 
-        const options = {
-            duration: 3000,
-            position: "bottom-center" as const,
-            className: 'border border-divider !bg-content2 !text-foreground',
-        };
+    // Утилита для toast'ов
+    showToast(message: string, type: 'start' | 'success' | 'info' | 'warning' | 'error') {
+        // Показываем toast только если включены
+        if (!this.toastsEnabled) return;
+
+        let icon = 'ℹ️'; // по умолчанию
 
         switch (type) {
-            case 'error':
-                return toast.error(`${message}`, options);
-            case 'loading':
-                return toast.loading(`${message}`, options);
-            case 'success':
-                return toast.success(`${message}`, options);
-            default:
-                return toast(`${message}`, options);
+            case 'start': icon = '🚀'; break;
+            case 'success': icon = '✅'; break;
+            case 'warning': icon = '⚠️'; break;
+            case 'error': icon = '❌️'; break;
         }
+
+
+        const options = {
+            duration: Infinity,
+            // position: "bottom-left" as const,
+            className: '!p-0 !px-2 border border-divider !bg-content2 !text-foreground text-[12px]',
+            icon: icon
+        };
+
+        return toast(`${message}`, options);
     }
 
     // Основные методы логирования
     start(message: string, line?: number, ...args: any[]) {
         const context = this.getFullContext(line);
         console.log(`🚀${context ? ` [${context}]` : ''} ${message}`, ...args);
+        // Показываем toast если включены
+        if (this.toastsEnabled) {
+            this.showToast(message, 'start');
+        }
     }
 
-    end(message: string, line?: number, ...args: any[]) {
+    success(message: string, line?: number, ...args: any[]) {
         const context = this.getFullContext(line);
-        console.log(`🏁${context ? ` [${context}]` : ''} ${message}`, ...args);
+        console.log(`✅${context ? ` [${context}]` : ''} ${message}`, ...args);
+        // Показываем toast если включены
+        if (this.toastsEnabled) {
+            this.showToast(message, 'success');
+        }
+    }
+
+    warning(message: string, line?: number, ...args: any[]) {
+        const context = this.getFullContext(line);
+        console.log(`❌️️${context ? ` [${context}]` : ''} ${message}`, ...args);
+        // Показываем toast если включены
+        if (this.toastsEnabled) {
+            this.showToast(message, 'warning');
+        }
+    }
+
+    error(message: string, line?: number, ...args: any[]) {
+        const context = this.getFullContext(line);
+        console.log(`⚠️${context ? ` [${context}]` : ''} ${message}`, ...args);
+        // Показываем toast если включены
+        if (this.toastsEnabled) {
+            this.showToast(message, 'error');
+        }
     }
 }
 
 // Создаем экземпляр логгера
 const logger = new Logger();
 
-// ИСПРАВЛЕННАЯ функция log
+// Функция log
 function log(message: string, line?: number, ...args: any[]) {
     const context = logger.getFullContext(line);
-    console.log(`${context ? `[${context}] ` : ''}${message}`, ...args);
+    console.log(`ℹ️ ${context ? `[${context}] ` : ''}${message}`, ...args);
+    // Показываем toast если включены
+    if (logger['toastsEnabled']) {
+        logger.showToast(message, 'info');
+    }
 }
 
 // Добавляем методы к функции log
@@ -64,15 +108,31 @@ log.start = (message: string, line?: number, ...args: any[]) => {
     logger.start(message, line, ...args);
 };
 
-log.end = (message: string, line?: number, ...args: any[]) => {
-    logger.end(message, line, ...args);
+log.success = (message: string, line?: number, ...args: any[]) => {
+    logger.success(message, line, ...args);
 };
+
+log.warning = (message: string, line?: number, ...args: any[]) => {
+    logger.warning(message, line, ...args);
+};
+
+log.error = (message: string, line?: number, ...args: any[]) => {
+    logger.error(message, line, ...args);
+};
+
 
 log.setContext = (context: string) => {
     logger.setContext(context);
 };
 
+// НОВЫЙ метод для управления toast'ами
+log.setToasts = (enabled: boolean) => {
+    logger.setToasts(enabled);
+};
+
+log.clearToasts = () => {
+    logger.clearToasts();
+};
+
 // Экспортируем функцию log
 export { log };
-
-// console.log('🚀 Function Logger готов!');

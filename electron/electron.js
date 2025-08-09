@@ -4,14 +4,15 @@ const path = require("path");
 const fs = require("fs");
 const {nativeImage} = require("electron");
 
-const {createTodayWindow} = require('./winToday');
+let mainWindow, calendarWindow, todayWindow
+const {createCalendarWindow} = require('./winCalendar');
+//const {createTodayWindow} = require('./winToday');
 
 const {trayIconCountHandler} = require('./iconTray');
 const {dockIconHandler} = require('./iconDock');
 
-let mainWindow, todayWindow
-
 const {setupPowerMonitor} = require("./powerMonitor");
+const {calendar} = require("@heroui/react");
 
 const HOST = "2000";
 const ENABLE_TRAY = true; // ✅ Если false — трей не создаётся
@@ -67,6 +68,14 @@ async function createMainWindow() {
 
         mainWindow = win;
         setupPowerMonitor(win);
+
+        //win.webContents.session.clearStorageData({
+        //    storages: ['cookies', 'serviceworkers']
+        //}).then(() => {
+        //    console.log('✅ Очистили старые cookies и service workers');
+        //    win.loadURL("http://localhost:" + HOST);
+        //});
+
         win.loadURL("http://localhost:" + HOST);
 
         win.webContents.setWindowOpenHandler(({ url }) => {
@@ -139,7 +148,8 @@ function quitApp() {
 
 app.whenReady().then(async () => {
     await createMainWindow();
-    todayWindow = await createTodayWindow(HOST);
+    calendarWindow = await createCalendarWindow(HOST);
+    //todayWindow = await createTodayWindow(HOST);
 
     // const dockIconPath = path.join(__dirname, 'electron', 'icons', 'dock_icon.png');
     // if (process.platform === 'darwin') {

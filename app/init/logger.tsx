@@ -2,19 +2,19 @@ import {toast} from "react-hot-toast";
 
 class Logger {
     private globalContext: string = '';
-    private toastsEnabled: boolean = false; // ДОБАВИЛИ настройку toast'ов
+    private toastsEnabled: boolean = false;
 
-    // Устанавливаем контекст для всей страницы/процесса
+    // ДОБАВЛЯЕМ отслеживание повторяющихся toast'ов
+    private activeToasts: Map<string, {id: string, count: number, timeout: NodeJS.Timeout}> = new Map();
+
     setContext(context: string) {
         this.globalContext = context;
     }
 
-    // НОВЫЙ метод для включения/выключения toast'ов
     setToasts(enabled: boolean) {
         this.toastsEnabled = enabled;
     }
 
-    // Получаем полный контекст
     getFullContext(line?: number): string {
         if (this.globalContext) {
             return line ? `${this.globalContext}:${line}` : this.globalContext;
@@ -22,79 +22,137 @@ class Logger {
         return line ? `:${line}` : '';
     }
 
-    // Утилита для toast'ов
-    showToast(message: string, type: 'success' | 'error' | 'loading' | 'info' = 'info') {
-        // Показываем toast только если включены
+    clearToasts() {
+        toast.dismiss();
+        // Очищаем и наш кэш
+        this.activeToasts.clear();
+        console.log('🗑️ Все toast\'ы очищены');
+    }
+
+    // НОВАЯ функция с группировкой
+    showToast(message: string, type: 'start' | 'success' | 'info' | 'warning' | 'error') {
         if (!this.toastsEnabled) return;
+
+        // Создаем ключ для группировки
+        const key = `${type}:${message}`;
+
+        let icon = 'ℹ️';
+        switch (type) {
+            case 'start': icon = '🚀'; break;
+            case 'success': icon = '✅'; break;
+            case 'warning': icon = '⚠️'; break;
+            case 'error': icon = '❌️'; break;
+        }
 
         const options = {
             duration: Infinity,
-            position: "bottom-center" as const,
-            className: 'border border-divider !bg-content2 !text-foreground w-[200px]',
+            className: '!p-0 !px-2 border border-divider !bg-content2 !text-foreground text-[12px]',
+            icon: icon
         };
 
-        switch (type) {
-            case 'error':
-                return toast.error(`${message}`, options);
-            case 'loading':
-                return toast.loading(`${message}`, options);
-            case 'success':
-                return toast.success(`${message}`, options);
-            default:
-                return toast(`${message}`, options);
+        if (this.activeToasts.has(key)) {
+            // Увеличиваем счетчик
+            const existing = this.activeToasts.get(key)!;
+            existing.count++;
+
+            // Удаляем старый toast
+            toast.dismiss(existing.id);
+
+            // Создаем новый с счетчиком
+            const displayMessage = `${message} (${existing.count})`;
+            const newId = toast(displayMessage, options);
+
+            // Сбрасываем таймер
+            clearTimeout(existing.timeout);
+            const timeout = setTimeout(() => {
+                this.activeToasts.delete(key);
+            }, 3000);
+
+            this.activeToasts.set(key, { id: newId, count: existing.count, timeout });
+
+        } else {
+            // Создаем новый toast
+            const toastId = toast(message, options);
+
+            const timeout = setTimeout(() => {
+                this.activeToasts.delete(key);
+            }, 3000);
+
+            this.activeToasts.set(key, { id: toastId, count: 1, timeout });
         }
     }
 
-    // Основные методы логирования
+    // Остальные методы остаются без изменений
     start(message: string, line?: number, ...args: any[]) {
         const context = this.getFullContext(line);
         console.log(`🚀${context ? ` [${context}]` : ''} ${message}`, ...args);
-        // Показываем toast если включены
         if (this.toastsEnabled) {
-            this.showToast(message, 'loading');
+            this.showToast(message, 'start');
         }
     }
 
-    end(message: string, line?: number, ...args: any[]) {
+    success(message: string, line?: number, ...args: any[]) {
         const context = this.getFullContext(line);
-        console.log(`🏁${context ? ` [${context}]` : ''} ${message}`, ...args);
-        // Показываем toast если включены
+        console.log(`✅${context ? ` [${context}]` : ''} ${message}`, ...args);
         if (this.toastsEnabled) {
             this.showToast(message, 'success');
         }
     }
+
+    warning(message: string, line?: number, ...args: any[]) {
+        const context = this.getFullContext(line);
+        console.log(`❌️️${context ? ` [${context}]` : ''} ${message}`, ...args);
+        if (this.toastsEnabled) {
+            this.showToast(message, 'warning');
+        }
+    }
+
+    error(message: string, line?: number, ...args: any[]) {
+        const context = this.getFullContext(line);
+        console.log(`⚠️${context ? ` [${context}]` : ''} ${message}`, ...args);
+        if (this.toastsEnabled) {
+            this.showToast(message, 'error');
+        }
+    }
 }
 
-// Создаем экземпляр логгера
+// Остальной код остается как есть...
 const logger = new Logger();
 
-// Функция log
 function log(message: string, line?: number, ...args: any[]) {
     const context = logger.getFullContext(line);
-    console.log(`${context ? `[${context}] ` : ''}${message}`, ...args);
-    // Показываем toast если включены
+    console.log(`ℹ️ ${context ? `[${context}] ` : ''}${message}`, ...args);
     if (logger['toastsEnabled']) {
         logger.showToast(message, 'info');
     }
 }
 
-// Добавляем методы к функции log
 log.start = (message: string, line?: number, ...args: any[]) => {
     logger.start(message, line, ...args);
 };
 
-log.end = (message: string, line?: number, ...args: any[]) => {
-    logger.end(message, line, ...args);
+log.success = (message: string, line?: number, ...args: any[]) => {
+    logger.success(message, line, ...args);
+};
+
+log.warning = (message: string, line?: number, ...args: any[]) => {
+    logger.warning(message, line, ...args);
+};
+
+log.error = (message: string, line?: number, ...args: any[]) => {
+    logger.error(message, line, ...args);
 };
 
 log.setContext = (context: string) => {
     logger.setContext(context);
 };
 
-// НОВЫЙ метод для управления toast'ами
 log.setToasts = (enabled: boolean) => {
     logger.setToasts(enabled);
 };
 
-// Экспортируем функцию log
+log.clearToasts = () => {
+    logger.clearToasts();
+};
+
 export { log };

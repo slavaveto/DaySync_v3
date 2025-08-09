@@ -2,7 +2,7 @@
 import {createContext, useContext, useEffect, useRef, useState, useCallback} from "react";
 import usePersistentState from "@/app/init/usePersistentState"
 import type {ClientType, ItemType, SubTabType, TabType} from "@/app/types";
-
+import {log} from "@/app/init/logger";
 
 // ✅ Определяем типы
 interface MainContextType {
@@ -35,6 +35,8 @@ interface MainContextType {
 
     syncHighlight: number[];
     setSyncHighlight: (ids: number[]) => void;
+
+    clearAllToasts: () => void;
 }
 
 // ✅ Создаём контекст
@@ -59,6 +61,10 @@ export function MainContextProvider({children}: { children: React.ReactNode }) {
 
     const [syncHighlight, setSyncHighlight] = useState<number[]>([]);
 
+    const clearAllToasts = useCallback(() => {
+        log.clearToasts();
+    }, []);
+
     return (
         <MainContext.Provider value={{
             maxContentWidth,
@@ -76,6 +82,8 @@ export function MainContextProvider({children}: { children: React.ReactNode }) {
             isDownloadingData, setIsDownloadingData,
 
             syncHighlight, setSyncHighlight,
+
+            clearAllToasts,
         }}>
             {children}
         </MainContext.Provider>

@@ -1,5 +1,5 @@
 // utils/compareWithRemote.ts
-import { createAuthenticatedClient } from "@/app/init/supabaseClient";
+import { createAuthenticatedClient } from "@/app/init/dbase/supabaseClient";
 import type { ItemType } from "@/app/types";
 
 export async function compareWithRemote(

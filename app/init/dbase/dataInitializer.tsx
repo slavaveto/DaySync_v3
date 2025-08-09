@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { useMainContext } from "@/app/context";
-import { createAuthenticatedClient } from "@/app/init/supabaseClient";
+import { createAuthenticatedClient } from "@/app/init/dbase/supabaseClient";
 import usePersistentState from "@/app/init/usePersistentState";
 import type {ClientType, ItemType, SubTabType, TabType} from "@/app/types";
 

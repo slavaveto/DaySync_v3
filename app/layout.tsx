@@ -48,7 +48,13 @@ export default function RootLayout({children}: { children: React.ReactNode }) {
 
         <body>
         <MyClerkProvider>
-            <Toaster/>
+            <Toaster
+                position="bottom-left"
+                containerStyle={{
+                    // left: '20px',
+                    bottom: '70px'
+                }}
+            />
             <HeroUiProvider>
                 <ThemeProvider>
                     <DeviceProvider>

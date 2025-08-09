@@ -3,9 +3,9 @@ import { MdCloudUpload } from "react-icons/md";
 import clsx from "clsx";
 import { Spinner } from "@heroui/react";
 import toast from "react-hot-toast";
-import { compareWithRemote } from '@/app/init/sync/compareWithRemote';
+import { compareWithRemote } from '@/app/init/sync2/compareWithRemote';
 import { useDevice } from '@/app/init/providers/MobileDetect';
-import { createAuthenticatedClient } from "@/app/init/supabaseClient";
+import { createAuthenticatedClient } from "@/app/init/dbase/supabaseClient";
 import { useAuth } from '@clerk/nextjs';
 
 import {CloudUpload, CloudDownload, SquareCheckBig, X} from "lucide-react";

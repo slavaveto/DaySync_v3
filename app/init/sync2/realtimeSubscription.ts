@@ -5,7 +5,7 @@ import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 let channelRef: RealtimeChannel | null = null;
 let authClient: SupabaseClient | null = null;
 
-export async function realtimeSubscription(
+export async function subscribeToItems(
     user_id: string,
     jwtToken: string,
     onPayload: (payload: any) => void
@@ -76,4 +76,21 @@ export async function realtimeSubscription(
 
     channelRef = channel;
     // console.log(`✅ Подписка активирована для user_id: ${user_id}`);
+}
+
+export async function unsubscribeFromItems() {
+    if (!authClient) return;
+
+    const existingChannel = authClient.getChannels().find(
+        (ch: RealtimeChannel) => ch.topic === "realtime:items_sync"
+    );
+
+    if (existingChannel) {
+        await authClient.removeChannel(existingChannel);
+        // console.log("❌ Подписка отключена");
+        channelRef = null;
+        authClient = null;
+    } else {
+        // console.log("🔎 Нет активной подписки");
+    }
 }

@@ -50,7 +50,6 @@ async function createTodayWindow(host) {
         resizable:      true,
         webPreferences: {
             preload:   path.join(__dirname, 'preload.js'),
-            //partition: 'persist:electron-isolated'
             partition: 'persist:today-window'
         }
     })

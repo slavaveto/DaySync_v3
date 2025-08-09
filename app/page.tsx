@@ -6,17 +6,18 @@ import MobDtToggle from '@/app/init/providers/mobDtToggle';
 import {useDevice} from '@/app/init/providers/MobileDetect';
 import {SignedIn, SignedOut, SignIn, SignOutButton} from "@clerk/nextjs";
 import {Button, Spinner} from "@heroui/react";
-import DataInitializer from "@/app/init/dataInitializer";
+import DataInitializer from "@/app/init/dbase/dataInitializer";
 import {useWindowSize} from "@/app/init/useWindowSize";
-import {LogOut} from "lucide-react";
+import {LogOut, Trash2} from "lucide-react";
 import {useMainContext} from "@/app/context";
 import {log} from "@/app/init/logger";
+import {SyncData} from "@/app/init/sync/syncData";
 
 export default function Home() {
 
     const {winWidth, winHeight} = useWindowSize();
     const {isMobile, isDesktop} = useDevice();
-    const {firstLoadFadeIn, setFirstLoadFadeIn} = useMainContext();
+    const {clearAllToasts, firstLoadFadeIn, setFirstLoadFadeIn} = useMainContext();
 
     log.setContext('sync');
     log.setToasts(true);
@@ -24,17 +25,12 @@ export default function Home() {
     // Снятие фокуса со всех элементов
     useEffect(() => {
 
-
-        log('Обычное сообщение');
-        log.start('Начинаем');
-        log.end('Закончили');
-
-
         function handleVisibilityChange() {
             if (document.visibilityState === "visible") {
                 (document.activeElement as HTMLElement)?.blur();
             }
         }
+
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
@@ -71,22 +67,6 @@ export default function Home() {
                 <Spinner size="lg" color="primary"/>
             </div>
 
-            {isDesktop && (
-                <div className={clsx(
-                    "fixed bottom-3 right-3 flex gap-2 items-center text-[14px] px-2 py-1 rounded z-50",
-                    firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0",
-                )}
-                >
-                    <MobDtToggle/>
-                    <ThemeToggle/>
-                    <SignOutButton>
-                        <Button size={"md"} variant="flat" color={"warning"} isIconOnly
-                                className={"w-[50px] border border-default-200"}>
-                            <LogOut size={22} className={""}/>
-                        </Button>
-                    </SignOutButton>
-                </div>
-            )}
 
             <SignedOut>
                 <div
@@ -115,6 +95,43 @@ export default function Home() {
 
             <SignedIn>
                 <DataInitializer/>
+                <SyncData/>
+
+                {isDesktop && (
+                    <>
+                <div className={clsx(
+                    "fixed bottom-[18px] left-[60px] flex gap-2 items-center text-[14px] px-2 py-1 rounded z-50",
+                    firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0",
+                )}
+                >
+                    <Button onClick={clearAllToasts}
+                            size={"sm"} variant="flat" color={"warning"}
+                            className={" border border-default-200"}>
+                        <Trash2 size={18} className={""}/> Очистить
+                    </Button>
+                </div>
+
+
+                <div className={clsx(
+                    "fixed bottom-3 right-3 flex gap-2 items-center text-[14px] px-2 py-1 rounded z-50",
+                    firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0",
+                )}
+                >
+
+
+                    <MobDtToggle/>
+                    <ThemeToggle/>
+                    <SignOutButton>
+                        <Button size={"md"} variant="flat" color={"warning"} isIconOnly
+                                className={"w-[50px] border border-default-200"}>
+                            <LogOut size={22} className={""}/>
+                        </Button>
+                    </SignOutButton>
+                </div>
+    </>
+                )}
+
+
                 <div
                     className={clsx(
                         "w-full h-screen mt-[-50px] flex items-center justify-center transition-opacity",
@@ -125,17 +142,11 @@ export default function Home() {
 
                     MainWindowContext
 
-
-
-
-
-
-
-                 {/*{isDesktop ? (*/}
-                 {/*    <MainWindow />*/}
-                 {/*) : (*/}
-                 {/*    <Mobile />*/}
-                 {/*)}*/}
+                    {/*{isDesktop ? (*/}
+                    {/*    <MainWindow />*/}
+                    {/*) : (*/}
+                    {/*    <Mobile />*/}
+                    {/*)}*/}
             </div>
         </SignedIn>
 </>
