@@ -1,15 +1,13 @@
 import type {Metadata} from "next";
 import {Montserrat} from 'next/font/google';
 import "@/app/globals.css";
-import {HeroUiProvider} from "@/app/utils/providers/HeroUIProvider";
-import {themeScript} from "@/app/utils/providers/themeScript";
-import {MainProvider} from "@/app/context";
-import {DndProvider} from "@/app/context_dnd";
-import {DeviceProvider} from '@/app/utils/providers/MobileDetect';
-import {ThemeProvider} from '@/app/utils/providers/ThemeProvider';
-import {MyClerkProvider} from '@/app/utils/providers/ClerkProvider';
+import {HeroUiProvider} from "@/app/init/providers/HeroUIProvider";
+import {themeScript} from "@/app/init/providers/themeScript";
+import {DeviceProvider} from '@/app/init/providers/MobileDetect';
+import {ThemeProvider} from '@/app/init/providers/ThemeProvider';
+import {MyClerkProvider} from '@/app/init/providers/ClerkProvider';
 import {Toaster} from 'react-hot-toast';
-import {MiscTabProvider} from "@/app/context_misc";
+import {MainContextProvider} from "@/app/context";
 
 const montserrat = Montserrat({
     display: "swap",
@@ -18,7 +16,7 @@ const montserrat = Montserrat({
 });
 
 export const metadata: Metadata = {
-    title: "DaySync",
+    title: "BootstrapCode",
     description: "",
     icons: {
         icon: process.env.NODE_ENV === "development" ? "/icons/favicon_local.png" : "/icons/favicon.png"
@@ -51,21 +49,19 @@ export default function RootLayout({children}: { children: React.ReactNode }) {
         <body>
         <MyClerkProvider>
             <Toaster/>
-            <MainProvider>
-                <DndProvider>
-                    <MiscTabProvider>
-                        <HeroUiProvider>
-                            <ThemeProvider>
-                                <DeviceProvider>
+            <HeroUiProvider>
+                <ThemeProvider>
+                    <DeviceProvider>
 
-                                    {children}
+                        <MainContextProvider>
 
-                                </DeviceProvider>
-                            </ThemeProvider>
-                        </HeroUiProvider>
-                    </MiscTabProvider>
-                </DndProvider>
-            </MainProvider>
+                            {children}
+
+                        </MainContextProvider>
+
+                    </DeviceProvider>
+                </ThemeProvider>
+            </HeroUiProvider>
         </MyClerkProvider>
         </body>
         </html>

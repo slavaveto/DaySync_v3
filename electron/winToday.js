@@ -6,7 +6,7 @@ const {setupPowerMonitor} = require("./powerMonitor");
 
 const TODAY_SETTINGS_PATH = path.join(
     app.getPath('userData'),
-    'daysync-today-window-settings.json'
+    'daysync3-today-window-settings.json'
 )
 
 function loadTodayWindowBounds() {

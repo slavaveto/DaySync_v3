@@ -1,45 +1,47 @@
 "use client";
 import React, {useEffect, useState} from "react";
 import clsx from "clsx";
-import ThemeToggle from '@/app/utils/providers/ThemeToggle';
-import MobDtToggle from '@/app/utils/providers/mobDtToggle';
-import {useDevice} from '@/app/utils/providers/MobileDetect';
-import {SignedIn, SignedOut, SignIn} from "@clerk/nextjs";
-import {Progress, Spinner} from "@heroui/react";
-
-import DataInitializer from "@/app/utils/dbase/DataInitializer";
-import {Main} from "@/app/main/_Main";
-import {Mobile} from "@/app/mobile/_Mobile";
+import ThemeToggle from '@/app/init/providers/ThemeToggle';
+import MobDtToggle from '@/app/init/providers/mobDtToggle';
+import {useDevice} from '@/app/init/providers/MobileDetect';
+import {SignedIn, SignedOut, SignIn, SignOutButton} from "@clerk/nextjs";
+import {Button, Spinner} from "@heroui/react";
+import DataInitializer from "@/app/init/dataInitializer";
+import {useWindowSize} from "@/app/init/useWindowSize";
+import {LogOut} from "lucide-react";
 import {useMainContext} from "@/app/context";
-import {useWindowSize} from "@/app/utils/useWindowSize";
-import {CustomProgress} from "@/app/utils/sync/CustomProgress";
-
+import {log} from "@/app/init/logger";
 
 export default function Home() {
 
-    const {
-        userId, setUserId, tabs, setTabs, subtabs, setSubtabs, items, setItems,
-        isUploadingData, isUserActive, syncTimeoutProgress, isDownloadingData
-    } = useMainContext();
-
     const {winWidth, winHeight} = useWindowSize();
-    // Снятие фокуса при возвращении на вкладку
+    const {isMobile, isDesktop} = useDevice();
+    const {firstLoadFadeIn, setFirstLoadFadeIn} = useMainContext();
+
+    log.setContext('sync');
+    log.setToasts(true);
+
+    // Снятие фокуса со всех элементов
     useEffect(() => {
+
+
+        log('Обычное сообщение');
+        log.start('Начинаем');
+        log.end('Закончили');
+
+
         function handleVisibilityChange() {
             if (document.visibilityState === "visible") {
                 (document.activeElement as HTMLElement)?.blur();
             }
         }
-
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => {
             document.removeEventListener("visibilitychange", handleVisibilityChange);
         };
     }, []);
 
-
     // Управление анимацией загрузки
-    const [firstLoadFadeIn, setFirstLoadFadeIn] = useState(false);
     const [showSpinner, setShowSpinner] = useState(true);
     useEffect(() => {
         const spinnerTimer = setTimeout(() => {
@@ -51,9 +53,6 @@ export default function Home() {
         return () => clearTimeout(spinnerTimer);
     }, []);
 
-
-    const {forcedMode, isMobile, isTablet, isDesktop} = useDevice();
-
     // Гидратация для SSR
     const [hydrated, setHydrated] = useState(false);
     useEffect(() => {
@@ -63,32 +62,36 @@ export default function Home() {
 
     return (
         <>
-            <DataInitializer/>
-
             <div
                 className={clsx(
-                    "fixed inset-0 mt-[-30px] flex items-center justify-center z-50 transition-opacity duration-500",
+                    "fixed inset-0 mt-[-100px] flex items-center justify-center transition-opacity duration-500",
                     showSpinner ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                 )}
             >
                 <Spinner size="lg" color="primary"/>
             </div>
 
-            {!isMobile && (
-            <div className={clsx(
-                "fixed bottom-3 right-3 flex gap-2 items-center text-[14px] px-2 py-1 rounded z-50",
-                firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0",
-            )}
-            >
-                <MobDtToggle/>
-                <ThemeToggle/>
-            </div>
+            {isDesktop && (
+                <div className={clsx(
+                    "fixed bottom-3 right-3 flex gap-2 items-center text-[14px] px-2 py-1 rounded z-50",
+                    firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0",
                 )}
+                >
+                    <MobDtToggle/>
+                    <ThemeToggle/>
+                    <SignOutButton>
+                        <Button size={"md"} variant="flat" color={"warning"} isIconOnly
+                                className={"w-[50px] border border-default-200"}>
+                            <LogOut size={22} className={""}/>
+                        </Button>
+                    </SignOutButton>
+                </div>
+            )}
 
             <SignedOut>
                 <div
                     className={clsx(
-                        "fixed inset-0 mt-[-30px] flex items-center justify-center transition-opacity",
+                        "fixed inset-0 mt-[-100px] flex items-center justify-center transition-opacity",
                         firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
                     )}
                 >
@@ -111,33 +114,31 @@ export default function Home() {
             </SignedOut>
 
             <SignedIn>
+                <DataInitializer/>
                 <div
                     className={clsx(
-                        "w-full transition-opacity",
+                        "w-full h-screen mt-[-50px] flex items-center justify-center transition-opacity",
                         firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
                     )}
                 >
-                    {isMobile ? (
-
-                        <>
-                              <CustomProgress
-                                  value={!isUploadingData ? syncTimeoutProgress : undefined}
-                                  isUploadingData={isUploadingData}
-                                  isDownloadingData={isDownloadingData}
-                                  isUserActive={isUserActive}
-                                  winWidth={winWidth}
-                              />
 
 
-                        <Mobile setFirstLoadFadeIn={setFirstLoadFadeIn}/>
-                            </>
-                        ) : (
-                        <Main setFirstLoadFadeIn={setFirstLoadFadeIn}/>
-                )}
+                    MainWindowContext
 
+
+
+
+
+
+
+                 {/*{isDesktop ? (*/}
+                 {/*    <MainWindow />*/}
+                 {/*) : (*/}
+                 {/*    <Mobile />*/}
+                 {/*)}*/}
             </div>
         </SignedIn>
 </>
-)
-    ;
+    )
+        ;
 }
