@@ -1,4 +1,5 @@
 "use client";
+
 import React, {useEffect, useState} from "react";
 import clsx from "clsx";
 import ThemeToggle from '@/app/init/providers/ThemeToggle';
@@ -11,13 +12,17 @@ import {useWindowSize} from "@/app/init/useWindowSize";
 import {LogOut, Trash2} from "lucide-react";
 import {useMainContext} from "@/app/context";
 import {log} from "@/app/init/logger";
-import {SyncData} from "@/app/init/sync/syncData";
+import {SyncData} from "@/app/init/sync/_syncData";
+import {CustomProgress} from "@/app/init/sync/CustomProgress";
 
 export default function Home() {
 
     const {winWidth, winHeight} = useWindowSize();
     const {isMobile, isDesktop} = useDevice();
-    const {clearAllToasts, firstLoadFadeIn, setFirstLoadFadeIn} = useMainContext();
+    const {clearAllToasts, firstLoadFadeIn, setFirstLoadFadeIn,
+        userId, setUserId, tabs, setTabs, subtabs, setSubtabs, items, setItems,
+        isUploadingData, isUserActive, syncTimeoutProgress, isDownloadingData
+    } = useMainContext();
 
     log.setContext('sync');
     log.setToasts(true);
@@ -60,7 +65,7 @@ export default function Home() {
         <>
             <div
                 className={clsx(
-                    "fixed inset-0 mt-[-100px] flex items-center justify-center transition-opacity duration-500",
+                    "fixed inset-0 mt-[-50px] flex items-center justify-center transition-opacity duration-500",
                     showSpinner ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                 )}
             >
@@ -71,7 +76,7 @@ export default function Home() {
             <SignedOut>
                 <div
                     className={clsx(
-                        "fixed inset-0 mt-[-100px] flex items-center justify-center transition-opacity",
+                        "fixed inset-0 flex items-center justify-center transition-opacity",
                         firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
                     )}
                 >
@@ -134,13 +139,29 @@ export default function Home() {
 
                 <div
                     className={clsx(
-                        "w-full h-screen mt-[-50px] flex items-center justify-center transition-opacity",
+                        "w-full transition-opacity",
                         firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
                     )}
                 >
 
+                    <CustomProgress
+                        value={!isUploadingData ? syncTimeoutProgress : undefined}
+                        isUploadingData={isUploadingData}
+                        isDownloadingData={isDownloadingData}
+                        isUserActive={isUserActive}
+                        winWidth={winWidth}
+                    />
 
+
+
+                    <div
+                        className={clsx(
+                            "w-full h-screen mt-[-25px] flex items-center justify-center transition-opacity",
+                            firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
+                        )}
+                    >
                     MainWindowContext
+                    </div>
 
                     {/*{isDesktop ? (*/}
                     {/*    <MainWindow />*/}

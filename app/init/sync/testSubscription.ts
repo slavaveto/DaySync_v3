@@ -8,7 +8,7 @@ interface TestSubscriptionParams {
     onPayloadRef: React.MutableRefObject<((payload: any) => void) | null>;
 }
 
-export const testSubscriptionAfterWake = async (params: TestSubscriptionParams): Promise<boolean> => {
+export const testSubscription = async (params: TestSubscriptionParams): Promise<boolean> => {
     const { user_id, deviceId, getToken, onPayloadRef } = params;
 
     if (!user_id) return false;

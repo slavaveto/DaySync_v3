@@ -3,7 +3,7 @@ import { MdCloudUpload } from "react-icons/md";
 import clsx from "clsx";
 import { Spinner } from "@heroui/react";
 import toast from "react-hot-toast";
-import { compareWithRemote } from '@/app/init/sync2/compareWithRemote';
+import { compareWithRemote } from '@/app/init/sync/compareWithRemote';
 import { useDevice } from '@/app/init/providers/MobileDetect';
 import { createAuthenticatedClient } from "@/app/init/dbase/supabaseClient";
 import { useAuth } from '@clerk/nextjs';
@@ -14,7 +14,7 @@ import {CloudUpload, CloudDownload, SquareCheckBig, X} from "lucide-react";
 
 import { useMainContext } from "@/app/context";
 
-export const UploadButton = () => {
+export const UploadData = () => {
     const {
         items, setItems, hasLocalChanges, setHasLocalChanges, isUserActive,
         syncTimeoutProgress, setSyncTimeoutProgress, isUploadingData, setIsUploadingData, userId,

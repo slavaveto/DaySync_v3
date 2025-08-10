@@ -12,12 +12,22 @@ import {MainContextProvider, useMainContext} from "@/app/context";
 import MobDtToggle from "@/app/init/providers/mobDtToggle";
 import ThemeToggle from "@/app/init/providers/ThemeToggle";
 import {LogOut, Trash2} from "lucide-react";
+import {CustomProgress} from "@/app/init/sync/CustomProgress";
+import {SyncData} from "@/app/init/sync/_syncData";
+import {log} from "@/app/init/logger";
+
 
 function CalendarContent() {
 
     const {winWidth, winHeight} = useWindowSize();
     const {isMobile, isDesktop} = useDevice();
-    const {clearAllToasts, firstLoadFadeIn, setFirstLoadFadeIn} = useMainContext();
+    const {clearAllToasts, firstLoadFadeIn, setFirstLoadFadeIn,
+        userId, setUserId, tabs, setTabs, subtabs, setSubtabs, items, setItems,
+        isUploadingData, isUserActive, syncTimeoutProgress, isDownloadingData
+    } = useMainContext();
+
+    log.setContext('sync');
+    log.setToasts(true);
 
     // Снятие фокуса со всех элементов
     useEffect(() => {
@@ -56,7 +66,7 @@ function CalendarContent() {
         <>
             <div
                 className={clsx(
-                    "fixed inset-0 mt-[-100px] flex items-center justify-center transition-opacity duration-500",
+                    "fixed inset-0 mt-[-50px] flex items-center justify-center transition-opacity duration-500",
                     showSpinner ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
                 )}
             >
@@ -67,7 +77,7 @@ function CalendarContent() {
             <SignedOut>
                 <div
                     className={clsx(
-                        "fixed inset-0 mt-[-30px] flex items-center justify-center transition-opacity",
+                        "fixed inset-0 flex items-center justify-center transition-opacity",
                         firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
                     )}
                 >
@@ -91,6 +101,8 @@ function CalendarContent() {
 
             <SignedIn>
 
+                <SyncData/>
+
                 {isDesktop && (
                     <>
                 <div className={clsx(
@@ -110,12 +122,30 @@ function CalendarContent() {
 
                 <div
                     className={clsx(
-                        "w-full h-screen mt-[-50px] flex items-center justify-center transition-opacity",
+                        "w-full transition-opacity",
                         firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
                     )}
                 >
 
+                    <CustomProgress
+                        value={!isUploadingData ? syncTimeoutProgress : undefined}
+                        isUploadingData={isUploadingData}
+                        isDownloadingData={isDownloadingData}
+                        isUserActive={isUserActive}
+                        winWidth={winWidth}
+                    />
+
+
+
+                    <div
+                        className={clsx(
+                            "w-full h-screen mt-[-25px] flex items-center justify-center transition-opacity",
+                            firstLoadFadeIn ? "duration-500 opacity-100" : "duration-10 opacity-0"
+                        )}
+                    >
                     CalendarWindowContext
+                    </div>
+
 
             </div>
         </SignedIn>

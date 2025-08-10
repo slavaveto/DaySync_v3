@@ -1,25 +1,25 @@
 import React, {useEffect, useRef, useState} from "react";
-import {MdCloudDownload} from "react-icons/md";
-import clsx from "clsx";
-import {createAuthenticatedClient} from "@/app/init/dbase/supabaseClient";
-import type {ItemType} from "@/app/types";
 import {useMainContext} from "@/app/context";
-import {Spinner} from "@heroui/react";
-import {toast} from "react-hot-toast";
-import {subscribeToItems} from "@/app/init/sync2/realtimeSubscription";
-import {useDevice} from "@/app/init/providers/MobileDetect";
-import usePersistentState from "@/app/init/usePersistentState"
+import {log} from "@/app/init/logger";
 import {useAuth} from '@clerk/nextjs';
+import type {ItemType} from "@/app/types";
 
-export const DownloadButton = () => {
+import {realtimeSubscription} from "./realtimeSubscription";
+import usePersistentState from "@/app/init/usePersistentState";
+import {useDevice} from "@/app/init/providers/MobileDetect";
+import {createAuthenticatedClient} from "@/app/init/dbase/supabaseClient";
+import {toast} from "react-hot-toast";
+
+export const SyncData2 = () => {
+
     const {
-        items, setItems, userId, isUserActive, isUploadingData, hasLocalChanges,
-        isDownloadingData, setIsDownloadingData, setSyncHighlight
+        items, setItems, userId, isUserActive, isUploadingData, hasLocalChanges, clearAllToasts,
+        setIsDownloadingData, setSyncHighlight
     } = useMainContext();
 
     const {getToken} = useAuth();
 
-    const {forcedMode, isMobile, isTablet, isDesktop} = useDevice();
+    const {isMobile, isDesktop} = useDevice();
 
     const [wasSyncedOk, setWasSyncedOk] = useState(false);
     const user_id = userId;
@@ -34,46 +34,6 @@ export const DownloadButton = () => {
     );
 
     let isSetupInProgress = false;
-
-    // Утилита для toast'ов в скрытых окнах
-    const showSyncToast = (message: string, type: 'success' | 'error' | 'loading' = 'success') => {
-        const isWindowHidden = document.visibilityState === 'hidden';
-
-        const options = {
-            duration: isWindowHidden ? Infinity : 3000,
-            position: "bottom-center" as const,
-            className: 'border border-divider !bg-content2 !text-foreground',
-            id: `hidden-sync-${Date.now()}`
-        };
-
-        switch (type) {
-            case 'error':
-                return toast.error(`${message}`, options);
-            case 'loading':
-                return toast.loading(`${message}`, options);
-            default:
-                return toast.success(`${message}`, options);
-        }
-    };
-
-    // Добавить useEffect для отслеживания видимости окна
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                // Окно стало видимым - скрываем все фоновые toast'ы
-                // Даем время пользователю увидеть что происходило в фоне
-                setTimeout(() => {
-                    toast.dismiss();
-                    console.log('🔍 Скрыли фоновые toast\'ы через задержку');
-                }, 3000); // 3 секунды чтобы прочитать
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, []);
 
     const setupSubscription = async () => {
 
@@ -101,7 +61,7 @@ export const DownloadButton = () => {
                 return;
             }
 
-            await subscribeToItems(user_id ?? "", token, (payload) => {
+            await realtimeSubscription(user_id ?? "", token, (payload) => {
                 // console.log("🎯 payload:", payload);
                 // console.log("📡 Вызываем subscribeToItems...");
                 // console.log("🎯 СОБЫТИЕ в setupSubscription:", payload.eventType, payload.new?.title);
@@ -160,6 +120,7 @@ export const DownloadButton = () => {
             console.error("❌ Ошибка настройки подписки:", error);
         } finally {
             // Небольшая задержка перед разблокировкой
+            log.success("Подписка успешно настроена!")
             setTimeout(() => {
                 setIsSettingUpSubscription(false);
                 isSetupInProgress = false;
@@ -170,10 +131,130 @@ export const DownloadButton = () => {
 
     useEffect(() => {
         if (!user_id) return;
-
+        log.start("Обновляем подписку...")
         setupSubscription(); // ✅ подписываемся
-        reloadAllItems();    // ✅ первый раз загружаем
+
+        setTimeout(() => {
+            reloadAllItems();
+        }, 1000);  // ✅ первый раз загружаем
     }, [user_id]);
+
+    useEffect(() => {
+        if (!user_id) return;
+        if (!(window as any).electron?.onPowerStatus) return;
+
+        let didResume = false;  // флажок, что мы уже отреагировали на resumed
+        let powerEventTimeout: NodeJS.Timeout | null = null;
+
+        const unsubscribe = (window as any).electron.onPowerStatus(
+            ({status}: { status: string; message: string }) => {
+
+                clearAllToasts()
+
+                // При уходе в сон или блокировке сбросим флажок
+                if (status === "suspend" || status === "locked") {
+                    didResume = false;
+                    return;
+                }
+                // Если проснулись
+                if (status === "resumed") {
+                    didResume = true;
+                }
+                // Если разблокировка, но до этого НЕ было resumed
+                else if (status === "unlocked" && !didResume) {
+                    log('RESUMED - компьютер проснулся, пауза 3сек...');
+                } else {
+                    // console.log(`❌ Пропускаем: ${status}, didResume: ${didResume}`);
+                    return;
+                }
+
+                if (powerEventTimeout) {
+                    clearTimeout(powerEventTimeout);
+                }
+
+                powerEventTimeout = setTimeout(async () => {
+                    log.start('Начинаем проверку сети...');
+
+                    const isNetworkOk = await checkNetworkConnectivity();
+
+                    if (!isNetworkOk) {
+                        log.warning('Сеть еще не восстановилась, ждем еще 5 секунд...');
+
+                        setTimeout(async () => {
+                            log.warning('Повторная проверка сети...');
+                            const isNetworkOkRetry = await checkNetworkConnectivity();
+                            if (isNetworkOkRetry) {
+                                log.success('Сеть восстановлена после повтора!');
+                            } else {
+                                log.warning('Сеть все еще нестабильна, но продолжаем...');
+                            }
+                        }, 5000);
+
+                    } else {
+                        log.success('Сеть восстановлена сразу!');
+                    }
+
+                    log.start('Запускаем восстановление подписки...');
+                    performSubscriptionRecovery();
+
+                }, 3000);
+            });
+        return () => {
+            unsubscribe();
+        };
+    }, [user_id, hasLocalChanges, isUploadingData]);
+
+    // Функция восстановления подписки с тестом
+    const performSubscriptionRecovery = () => {
+        console.log("🚀 Запускаем восстановление подписки...");
+
+        if (!user_id) {
+            console.log("❌ user_id отсутствует, пропускаем восстановление");
+            return;
+        }
+
+        // showSyncToast("Восстанавливаю синхронизацию после пробуждения...", 'loading');
+
+        // Проверка локальных изменений
+        if (hasLocalChanges || isUploadingData) {
+            console.log("⏸️ Пропускаем восстановление - есть локальные изменения или идет загрузка");
+            return;
+        }
+
+        setupSubscription()
+
+        setTimeout(() => {
+            reloadAllItems();
+        }, 1000);
+
+        // Тест подписки с настраиваемой задержкой
+        setTimeout(async () => {
+            console.log("🧪 Запускаем тест подписки...");
+            // toast("🔍 Проверяю подписку...", {
+            //     duration: 1500,
+            //     position: "bottom-center"
+            // });
+
+            const isWorking = await testSubscriptionAfterWake();
+
+            if (!isWorking) {
+                console.log("❌ Тест подписки провален!");
+
+                const shouldRestart = confirm(
+                    "Не удалось восстановить синхронизацию данных после пробуждения. Перезагрузить приложение?"
+                );
+
+                if (shouldRestart) {
+                    window.location.reload();
+                }
+            } else {
+                console.log("✅ Тест подписки успешен!");
+                // log.success("Тест подписки успешен!")
+            }
+        }, 3000);
+        // }, 0);
+        // });
+    };
 
     // Функция проверки доступности сети
     const checkNetworkConnectivity = async (): Promise<boolean> => {
@@ -181,7 +262,6 @@ export const DownloadButton = () => {
             // Используем собственный Supabase API вместо Google
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
             const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
             const response = await fetch(`${supabaseUrl}/rest/v1/`, {
                 method: 'HEAD',
                 headers: {
@@ -190,175 +270,13 @@ export const DownloadButton = () => {
                 },
                 signal: AbortSignal.timeout(5000)
             });
-            console.log("🌐 Supabase connectivity check:", response.status);
+            // console.log("🌐 Supabase connectivity check:", response.status);
             return response.ok;
         } catch (error) {
-            console.log("❌ Supabase connectivity failed:", error);
+            // console.log("❌ Supabase connectivity failed:", error);
             return false;
         }
     };
-
-    // Функция восстановления подписки с тестом
-    const performSubscriptionRecovery = (testDelay: number = 8000) => {
-        console.log("🚀 Запускаем восстановление подписки...");
-
-        // showSyncToast("Восстанавливаю синхронизацию после пробуждения...", 'loading');
-
-        // requestAnimationFrame(() => {
-        // setTimeout(() => {
-
-            // Проверка локальных изменений
-            if (hasLocalChanges || isUploadingData) {
-                console.log("⏸️ Пропускаем восстановление - есть локальные изменения или идет загрузка");
-                return;
-            }
-
-            setupSubscription();
-            reloadAllItems();
-
-        // showSyncToast("Подписка восстановлена", 'success');
-
-            // Тест подписки с настраиваемой задержкой
-            setTimeout(async () => {
-                console.log("🧪 Запускаем тест подписки...");
-                showSyncToast("Проверяю подписку...", 'loading');
-                // toast("🔍 Проверяю подписку...", {
-                //     duration: 1500,
-                //     position: "bottom-center"
-                // });
-
-                const isWorking = await testSubscriptionAfterWake();
-
-                if (!isWorking) {
-                    console.log("❌ Тест подписки провален!");
-                    toast.error("⚠️ Требуется перезагрузка", {
-                        duration: 2000,
-                        position: "bottom-center"
-                    });
-
-                    const shouldRestart = confirm(
-                        "Не удалось восстановить синхронизацию данных после пробуждения. Перезагрузить приложение?"
-                    );
-
-                    if (shouldRestart) {
-                        window.location.reload();
-                    }
-                } else {
-                    console.log("✅ Тест подписки успешен!");
-                    showSyncToast("Подписка проверена и работает!", 'success');
-                }
-            }, testDelay);
-    // }, 0);
-            // });
-    };
-
-
-    useEffect(() => {
-        // Ждём, пока user_id станет истинным
-        if (!user_id) return;
-        if (!(window as any).electron?.onPowerStatus) return;
-
-        let didResume = false;  // флажок, что мы уже отреагировали на resumed
-
-        let powerEventTimeout: NodeJS.Timeout | null = null;
-
-        const unsubscribe = (window as any).electron.onPowerStatus(
-            ({status}: { status: string; message: string }) => {
-                const timestamp = new Date().toISOString();
-                console.log(`🔥 POWER EVENT #${Math.random().toFixed(3)}: ${status} at ${timestamp}`);
-                console.log(`🔥 didResume: ${didResume}, hasLocalChanges: ${hasLocalChanges}, isUploadingData: ${isUploadingData}`);
-
-                // При уходе в сон или блокировке сбросим флажок
-                if (status === "suspend" || status === "locked") {
-                    console.log("💤 Компьютер засыпает/блокируется");
-                    didResume = false;
-                    return;
-                }
-                // Если проснулись
-                if (status === "resumed") {
-                    console.log("⏰ RESUMED - компьютер проснулся");
-                    didResume = true;
-                    //console.log("🟢 resume — обновляю");
-                }
-                // Если разблокировка, но до этого НЕ было resumed
-                else if (status === "unlocked" && !didResume) {
-                    console.log("🟢 unlock без предшествующего resume — обновляю");
-                } else {
-                    console.log(`❌ Пропускаем: ${status}, didResume: ${didResume}`);
-                    return;
-                }
-
-                console.log("🚀 Запускаем восстановление синхронизации...");
-
-                if (powerEventTimeout) {
-                    clearTimeout(powerEventTimeout);
-                }
-
-                showSyncToast("Проверяем сеть...", 'loading');
-
-                powerEventTimeout = setTimeout(async () => {
-
-
-                    console.log("🔍 Начинаем проверку восстановления сети...");
-
-                    const isNetworkOk = await checkNetworkConnectivity();
-
-                    if (!isNetworkOk) {
-                        console.log("❌ Сеть еще не восстановилась, ждем еще 5 секунд...");
-
-                        setTimeout(async () => {
-                            console.log("🔍 Повторная проверка сети...");
-                            const isNetworkOkRetry = await checkNetworkConnectivity();
-
-                            if (isNetworkOkRetry) {
-                                console.log("✅ Сеть восстановлена после повтора!");
-                            } else {
-                                console.log("⚠️ Сеть все еще нестабильна, но продолжаем...");
-                            }
-
-                            console.log("🚀 Запускаем восстановление подписки...");
-                            performSubscriptionRecovery(3000);
-
-                        }, 5000);
-
-                    } else {
-                        console.log("✅ Сеть восстановлена сразу!");
-
-                        console.log("🚀 Запускаем восстановление подписки...");
-                        performSubscriptionRecovery(3000);
-                    }
-
-                    showSyncToast("Сеть работает!", 'success');
-
-                }, 3000);
-
-            });
-
-        return () => {
-            unsubscribe();
-        };
-    }, [user_id, hasLocalChanges, isUploadingData]);
-
-    useEffect(() => {
-        if (!isMobile) return; // Только для мобилки!
-
-        function onVisibilityChange() {
-            if (document.visibilityState !== 'visible') return;
-
-            requestAnimationFrame(() => {
-                // Здесь state гарантированно актуальный
-                if (hasLocalChanges || isUploadingData) return;
-
-                setupSubscription();
-                reloadAllItems();
-            });
-        }
-
-        document.addEventListener("visibilitychange", onVisibilityChange);
-        return () => {
-            document.removeEventListener("visibilitychange", onVisibilityChange);
-        };
-    }, [isMobile, user_id, hasLocalChanges, isUploadingData,]);
 
     const lastReloadTimeRef = useRef<number>(0); //
     const highlightBufferRef = useRef<number[]>([]);
@@ -379,6 +297,7 @@ export const DownloadButton = () => {
         setIsReloadingData(true);
         // console.log("🔒 Заблокировали reloadAllItems");
 
+
         try {
             const token = await getToken({template: 'supabase'});
             if (!token) {
@@ -387,6 +306,8 @@ export const DownloadButton = () => {
                 setIsReloadingData(false);
                 return;
             }
+
+            log.start("Обновляем данные...")
 
             // Создаем аутентифицированный клиент
             const authClient = createAuthenticatedClient(token);
@@ -397,17 +318,15 @@ export const DownloadButton = () => {
                 .eq("user_id", user_id)
                 .order("order", {ascending: true});
 
-            const timeElapsed = Date.now() - startTime;
-            const minTotal = 2000; // минимальная длительность всей операции
-            const remaining = Math.max(0, minTotal - timeElapsed);
-
-            if (remaining > 0) {
-                await new Promise(resolve => setTimeout(resolve, remaining));
-            }
+            // const timeElapsed = Date.now() - startTime;
+            // const minTotal = 2000; // минимальная длительность всей операции
+            // const remaining = Math.max(0, minTotal - timeElapsed);
+            //
+            // if (remaining > 0) {
+            //     await new Promise(resolve => setTimeout(resolve, remaining));
+            // }
 
             setIsDownloadingData(false);
-
-
 
             if (!error && freshItems) {
                 setWasSyncedOk(true);
@@ -493,19 +412,8 @@ export const DownloadButton = () => {
                         } else {
 
                             setTimeout(() => {
-                                showSyncToast("Данные обновлены!", 'success');
-                                // toast.success(
-                                //     <div className="flex flex-col ml-2 gap-1 bg-content2 z-100">
-                                //         <div>
-                                //             <span className="font-semibold">Данные обновлены!</span>
-                                //         </div>
-                                //     </div>,
-                                //     {
-                                //         duration: 2000,
-                                //         className: 'border border-divider !bg-content2 !text-foreground',
-                                //         position: "bottom-center"
-                                //     }
-                                // );
+                                console.log("Данные обновлены!")
+                                // log.success("Данные обновлены!")
                             }, 1000);
                         }
                     }
@@ -567,6 +475,8 @@ export const DownloadButton = () => {
         } finally {
             setIsDownloadingData(false);
 
+            log.success("Данные обновлены!")
+
             setTimeout(() => {
                 setIsReloadingData(false);
                 console.log("🔓 Разблокировали reloadAllItems");
@@ -575,14 +485,14 @@ export const DownloadButton = () => {
 
     }
 
-    const [waitWake, setWaitWake] = useState(false);
-    useEffect(() => {
-        if (waitWake && user_id) {
-            setWaitWake(false);
-            setupSubscription();
-            reloadAllItems();
-        }
-    }, [waitWake, user_id]);
+    // const [waitWake, setWaitWake] = useState(false);
+    // useEffect(() => {
+    //     if (waitWake && user_id) {
+    //         setWaitWake(false);
+    //         setupSubscription();
+    //         reloadAllItems();
+    //     }
+    // }, [waitWake, user_id]);
 
     const showButton = false;
 
@@ -729,42 +639,5 @@ export const DownloadButton = () => {
         });
     };
 
-    return (
-        <>
-            {/*<PingWatcher*/}
-            {/*    onWake={(onComplete) => {*/}
-            {/*        if (!user_id) {*/}
-            {/*            setWaitWake(() => true);   // ждём, когда user_id появится*/}
-            {/*            return;*/}
-            {/*        }*/}
-            {/*        setWaitWake(false);*/}
-            {/*        setupSubscription();*/}
-            {/*        reloadAllItems(undefined, () => onComplete());*/}
-            {/*    }}*/}
-            {/*/>*/}
-
-            {showButton ? (
-                <button
-                    className={clsx(
-                        "transition-all  duration-200 pointer-events-none opacity-50",
-                        isDownloadingData
-                            ? "text-default-400"
-                            : wasSyncedOk
-                                ? "text-success"
-                                : "text-default-400"
-                    )}
-                    // disabled={isDownloadingData}
-                >
-                    {isDownloadingData ? (
-                        <Spinner size="sm" color={"success"} className="w-[26px] h-[20px]"/>
-                    ) : (
-                        <MdCloudDownload
-                            size={isMobile ? 26 : 22}
-                            className="w-[26px]"
-                        />
-                    )}
-                </button>
-            ) : null}
-        </>
-    );
+    return null;
 };

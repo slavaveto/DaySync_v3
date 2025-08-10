@@ -39,6 +39,7 @@ export const reloadAllItems = async (
     const startTime = Date.now();
     setIsDownloadingData(true);
 
+    // 🔒 Защита от множественных вызовов
     if (isReloadingData) {
         return;
     }
@@ -56,6 +57,7 @@ export const reloadAllItems = async (
 
         log.start("Обновляем данные...");
 
+        // Создаем аутентифицированный клиент
         const authClient = createAuthenticatedClient(token);
 
         const { data: freshItems, error } = await authClient
@@ -88,7 +90,7 @@ export const reloadAllItems = async (
                     .filter(i => !localIds.has(i.id))
                     .map(i => ({ ...i, synced_at: now }));
 
-                // Подсветка только новых и изменённых
+                // ======= ДОБАВЛЕНО: подсветка только новых и изменённых =======
                 if (highlightId === undefined) {
                     const updatedIds: number[] = [];
 
@@ -104,7 +106,7 @@ export const reloadAllItems = async (
                         const remote = freshMap.get(local.id);
                         if (
                             remote &&
-                            remote.sync_highlight &&
+                            remote.sync_highlight && // <--- только если sync_highlight выставлен
                             new Date(remote.updated_at) > new Date(local.updated_at)
                         ) {
                             updatedIds.push(remote.id);
@@ -112,27 +114,29 @@ export const reloadAllItems = async (
                     });
 
                     if (updatedIds.length > 0) {
+                        // Подсчёт отдельно новых и изменённых
                         const newCount = newItems.filter(item => item.sync_highlight).length;
                         const changedCount = updatedIds.length - newCount;
 
+                        // Показываем тост только не в render
                         setTimeout(() => {
                             toast.success(
                                 <div className="flex flex-col ml-2 gap-1 bg-content2 z-100">
-                                <div>
-                                    <span className="font-semibold">Данные обновлены!</span>
-                            </div>
-                            <div>Загружено новых: <span className="font-semibold pl-1">{newCount}</span>
-                                </div>
-                                <div>Обновлено:
-                            <span className="font-semibold pl-1">{changedCount}</span>
-                                </div>
+                                    <div>
+                                        <span className="font-semibold">Данные обновлены!</span>
+                                    </div>
+                                    <div>Загружено новых: <span className="font-semibold pl-1">{newCount}</span>
+                                    </div>
+                                    <div>Обновлено:
+                                        <span className="font-semibold pl-1">{changedCount}</span>
+                                    </div>
                                 </div>,
-                            {
-                                duration: 2000,
+                                {
+                                    duration: 2000,
                                     className: 'border border-divider !bg-content2 !text-foreground',
-                                position: "bottom-center"
-                            }
-                        );
+                                    position: "bottom-center"
+                                }
+                            );
                         }, 1000);
 
                         setSyncHighlight(updatedIds);
@@ -145,7 +149,6 @@ export const reloadAllItems = async (
 
                     } else {
                         setTimeout(() => {
-                            log.success("Данные обновлены!");
                         }, 1000);
                     }
                 }
@@ -153,7 +156,47 @@ export const reloadAllItems = async (
                 return [...updated, ...newItems].sort((a, b) => a.order - b.order);
             });
 
-            // Остальная логика подсветки...
+            const timeSinceLastReload = startTime - lastReloadTimeRef.current;
+            lastReloadTimeRef.current = startTime;
+
+            if (highlightId !== undefined) {
+                const idsToHighlight = Array.isArray(highlightId) ? highlightId : [highlightId];
+
+                // 🟢 Фильтруем те id, которые не имеют sync_highlight === true
+                const filteredIdsToHighlight = idsToHighlight.filter((id) => {
+                    const item = freshItems.find((i) => i.id === id);
+                    return item?.sync_highlight;
+                });
+
+                if (filteredIdsToHighlight.length === 0) {
+                    return; // ❌ Если нечего подсвечивать — выходим сразу
+                }
+
+                if (timeSinceLastReload < 3000) {
+                    // Копим id в буфере без дублей
+                    highlightBufferRef.current = Array.from(new Set([
+                        ...highlightBufferRef.current,
+                        ...filteredIdsToHighlight,
+                    ]));
+                } else {
+                    // Если прошло больше 3 сек — сбрасываем буфер и начинаем заново
+                    highlightBufferRef.current = filteredIdsToHighlight;
+                }
+
+                // Обновляем highlight
+                setSyncHighlight(highlightBufferRef.current);
+
+                // Сбрасываем через 5 секунд (таймер обновляем)
+                if (highlightClearTimeoutRef.current) {
+                    clearTimeout(highlightClearTimeoutRef.current);
+                }
+                highlightClearTimeoutRef.current = setTimeout(() => {
+                    highlightBufferRef.current = [];
+                    setSyncHighlight([]);
+                }, 6000);
+            }
+
+            // 🟢 Вот тут ставим флаг, когда всё готово:
             if (onReloadComplete) {
                 onReloadComplete();
             }
@@ -166,6 +209,9 @@ export const reloadAllItems = async (
         console.error("❌ Ошибка в reloadAllItems:", err);
     } finally {
         setIsDownloadingData(false);
+
+        log.success("Данные обновлены!");
+
         setTimeout(() => {
             setIsReloadingData(false);
         }, 500);
