@@ -2,6 +2,7 @@ import { createAuthenticatedClient } from "@/app/init/dbase/supabaseClient";
 import type { ItemType } from "@/app/types";
 import { toast } from "react-hot-toast";
 import { log } from "@/app/init/logger";
+import {useMainContext} from "@/app/context";
 
 interface ReloadAllItemsParams {
     user_id: string;
@@ -22,12 +23,15 @@ export const reloadAllItems = async (
     highlightId?: number,
     onReloadComplete?: () => void
 ) => {
+
+    const {
+        items, setItems, userId, isUserActive, isUploadingData, hasLocalChanges, clearAllToasts,
+        setIsDownloadingData, setSyncHighlight
+    } = useMainContext();
+
     const {
         user_id,
         getToken,
-        setItems,
-        setIsDownloadingData,
-        setSyncHighlight,
         setWasSyncedOk,
         lastReloadTimeRef,
         highlightBufferRef,

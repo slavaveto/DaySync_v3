@@ -40,28 +40,27 @@ export const SyncData = () => {
 
     useEffect(() => {
         if (!user_id) return;
-        log.start("Обновляем подписку...")
 
+        const reloadParams = {
+            user_id,
+            getToken,
+            setItems,
+            setIsDownloadingData,
+            setSyncHighlight,
+            setWasSyncedOk,
+            lastReloadTimeRef,
+            highlightBufferRef,
+            highlightClearTimeoutRef,
+            isReloadingData,
+            setIsReloadingData
+        };
+
+        reloadAllItems(reloadParams);
+
+        log.start("Настраиваем подписку...")
         setupSubscription();
 
 
-        setTimeout(() => {
-            const reloadParams = {
-                user_id,
-                getToken,
-                setItems,
-                setIsDownloadingData,
-                setSyncHighlight,
-                setWasSyncedOk,
-                lastReloadTimeRef,
-                highlightBufferRef,
-                highlightClearTimeoutRef,
-                isReloadingData,
-                setIsReloadingData
-            };
-
-            reloadAllItems(reloadParams);
-        }, 1000);  // ✅ первый раз загружаем
     }, [user_id]);
 
     useEffect(() => {

@@ -19,7 +19,6 @@ export async function realtimeSubscription(
 
     // console.log('📡 Подписываемся на realtime для user_id:', user_id);
 
-
     const existingChannel = authClient.getChannels().find(
         (ch: RealtimeChannel) => ch.topic === "realtime:items_sync"
     );
