@@ -41,11 +41,9 @@ export const SyncData = () => {
                 // Запустить синхронизацию
             }
         },
-
         onConnectionLost: () => {
             log.warning("💾 Работаем в офлайн режиме");
         },
-
         onNetworkChange: (status) => {
             console.log("🌐 Статус сети изменился:", status);
         }

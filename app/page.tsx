@@ -15,6 +15,8 @@ import {log} from "@/app/init/logger";
 import {SyncData} from "@/app/init/sync/_syncData";
 import {CustomProgress} from "@/app/init/sync/CustomProgress";
 
+import {QuickNotes} from "@/app/common/QuickNotes";
+
 export default function Home() {
 
     const {winWidth, winHeight} = useWindowSize();
@@ -161,6 +163,8 @@ export default function Home() {
                         )}
                     >
                     MainWindowContext
+                        <QuickNotes />
+
                     </div>
 
                     {/*{isDesktop ? (*/}
