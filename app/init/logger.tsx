@@ -33,12 +33,21 @@ class Logger {
     showToast(message: string, type: 'start' | 'success' | 'info' | 'warning' | 'error') {
         if (!this.toastsEnabled) return;
 
+        // Получаем текущее время
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('ru-RU', {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+
         // Создаем ключ для группировки
         const key = `${type}:${message}`;
 
         let icon = 'ℹ️';
         switch (type) {
             case 'start': icon = '🚀'; break;
+            // case 'start': icon = '🔄'; break;
             case 'success': icon = '✅'; break;
             case 'warning': icon = '⚠️'; break;
             case 'error': icon = '❌️'; break;
@@ -59,7 +68,9 @@ class Logger {
             toast.dismiss(existing.id);
 
             // Создаем новый с счетчиком
-            const displayMessage = `${message} (${existing.count})`;
+            // const displayMessage = `${message} (${existing.count})`;
+            const displayMessage = `${message} (${existing.count}) (${timeString})`;
+
             const newId = toast(displayMessage, options);
 
             // Сбрасываем таймер
@@ -72,7 +83,11 @@ class Logger {
 
         } else {
             // Создаем новый toast
-            const toastId = toast(message, options);
+            // const toastId = toast(message, options);
+
+            // Создаем новый toast с временем
+            const displayMessage = `${message} (${timeString})`;
+            const toastId = toast(displayMessage, options);
 
             const timeout = setTimeout(() => {
                 this.activeToasts.delete(key);
@@ -85,6 +100,7 @@ class Logger {
     // Остальные методы остаются без изменений
     start(message: string, line?: number, ...args: any[]) {
         const context = this.getFullContext(line);
+        // console.log(`🔄${context ? ` [${context}]` : ''} ${message}`, ...args);
         console.log(`🚀${context ? ` [${context}]` : ''} ${message}`, ...args);
         if (this.toastsEnabled) {
             this.showToast(message, 'start');

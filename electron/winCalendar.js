@@ -54,9 +54,12 @@ async function createCalendarWindow(host) {
         }
     })
 
+
     await calendarWindow.loadURL(
         `http://localhost:${host}/win_calendar`
     )
+
+
 
     setupPowerMonitor(calendarWindow);
 

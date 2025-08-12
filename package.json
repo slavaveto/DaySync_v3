@@ -4,7 +4,7 @@
   "private": true,
   "main": "electron/electron.js",
   "scripts": {
-    "dev": "next dev --turbo -p 2000",
+    "dev": "next dev --turbo -p 3103",
     "electron": "electron electron/electron.js",
     "build": "next build",
     "start": "next start",

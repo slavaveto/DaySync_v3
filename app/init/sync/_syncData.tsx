@@ -1,15 +1,17 @@
-import React, {useEffect, useRef, useState} from "react";
+import {useEffect, useRef} from "react";
 import {useMainContext} from "@/app/context";
 import {log} from "@/app/init/logger";
 import {useAuth} from '@clerk/nextjs';
-import type {ItemType} from "@/app/types";
+import {toast} from "react-hot-toast";
+
 
 import usePersistentState from "@/app/init/usePersistentState";
 import {useDevice} from "@/app/init/providers/MobileDetect";
 
-import {realtimeSubscription} from "./realtimeSubscription";
-import {testSubscription} from "./testSubscription";
-import {reloadAllItems} from "./reloadAllItems";
+import {useSetupSubscription} from "./useSetupSubscription";
+import {useTestSubscription} from "./useTestSubscription";
+import {useReloadAllItems} from "./useReloadAllItems";
+import {useNetworkMonitoring} from "./useNetworkMonitoring";
 
 export const SyncData = () => {
 
@@ -22,44 +24,79 @@ export const SyncData = () => {
 
     const {isMobile, isDesktop} = useDevice();
 
-    const [wasSyncedOk, setWasSyncedOk] = useState(false);
     const user_id = userId;
 
-    let isSetupInProgress = false;
-
     const onPayloadRef = useRef<((payload: any) => void) | null>(null);
-
-    const [isSettingUpSubscription, setIsSettingUpSubscription] = useState(false);
 
     const [deviceId] = usePersistentState<string>(
         "deviceId",
         `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     );
 
+    const { isOnline, isSupabaseReachable, isFullyOnline, checkFullConnectivity } = useNetworkMonitoring({
+        onConnectionRestored: () => {
+            log.success("🚀 Связь восстановлена - запускаем синхронизацию!");
+            // Автоматически синхронизируем при восстановлении
+            if (hasLocalChanges) {
+                // Запустить синхронизацию
+            }
+        },
 
+        onConnectionLost: () => {
+            log.warning("💾 Работаем в офлайн режиме");
+        },
+
+        onNetworkChange: (status) => {
+            console.log("🌐 Статус сети изменился:", status);
+        }
+    });
+
+    // Автосинхронизация при восстановлении связи
+    // useEffect(() => {
+    //     if (isFullyOnline && hasLocalChanges) {
+    //         log.start("Сеть восстановлена - синхронизируем изменения...");
+    //         // Здесь можно запустить автосинхронизацию
+    //     }
+    // }, [isFullyOnline, hasLocalChanges]);
+
+    const {reloadAllItems} = useReloadAllItems();
+    const {testSubscription} = useTestSubscription({
+        deviceId,
+        onPayloadRef
+    });
+    const {setupSubscription} = useSetupSubscription({
+        onPayloadRef,
+    });
 
     useEffect(() => {
         if (!user_id) return;
 
-        const reloadParams = {
-            user_id,
-            getToken,
-            setItems,
-            setIsDownloadingData,
-            setSyncHighlight,
-            setWasSyncedOk,
-            lastReloadTimeRef,
-            highlightBufferRef,
-            highlightClearTimeoutRef,
-            isReloadingData,
-            setIsReloadingData
-        };
+        // 🔄 Сначала проверяем сеть!
+        log.start("RELOAD, проверяем подключение к сети...");
 
-        reloadAllItems(reloadParams);
+        checkFullConnectivity().then(networkStatus => {
+            if (!networkStatus.isSupabaseReachable) {
+                log.warning("⚠️ Нет подключения к серверу - работаем в офлайн режиме");
+                // Можно показать пользователю статус офлайн
+                return;
+            }
 
-        log.start("Настраиваем подписку...")
-        setupSubscription();
+            log.success("Подключение к серверу установлено!");
 
+            reloadAllItems(undefined, () => {
+                console.log("✅ Обновление завершено!");
+
+                setTimeout(() => {
+                    log.start("Настраиваем подписку...")
+
+                    setupSubscription(() => {
+                        console.log("✅ Подписка настроена!");
+                        // Можно запустить что-то еще после подписки
+                    });
+
+                }, 1000);
+            });
+        });
 
     }, [user_id]);
 
@@ -75,7 +112,7 @@ export const SyncData = () => {
 
                 clearAllToasts()
 
-                log('RESUMED - компьютер проснулся, пауза 3сек...');
+                log('RESUMED, пауза 3сек...');
                 console.log("RESUMED - компьютер проснулся, пауза 3сек...")
 
                 // При уходе в сон или блокировке сбросим флажок
@@ -100,28 +137,7 @@ export const SyncData = () => {
                 }
 
                 powerEventTimeout = setTimeout(async () => {
-                    log.start('Начинаем проверку сети...');
 
-                    const isNetworkOk = await checkNetworkConnectivity();
-
-                    if (!isNetworkOk) {
-                        log.warning('Сеть еще не восстановилась, ждем еще 5 секунд...');
-
-                        setTimeout(async () => {
-                            log.warning('Повторная проверка сети...');
-                            const isNetworkOkRetry = await checkNetworkConnectivity();
-                            if (isNetworkOkRetry) {
-                                log.success('Сеть восстановлена после повтора!');
-                            } else {
-                                log.warning('Сеть все еще нестабильна, но продолжаем...');
-                            }
-                        }, 5000);
-
-                    } else {
-                        log.success('Сеть восстановлена сразу!');
-                    }
-
-                    log.start('Запускаем восстановление подписки...');
                     performSubscriptionRecovery();
 
                 }, 3000);
@@ -131,277 +147,109 @@ export const SyncData = () => {
         };
     }, [user_id, hasLocalChanges, isUploadingData]);
 
+
+
     // Функция восстановления подписки с тестом
     const performSubscriptionRecovery = () => {
-        console.log("🚀 Запускаем восстановление подписки...");
+        log.start("Проверяем подключение к сети...");
 
-        if (!user_id) {
-            console.log("❌ user_id отсутствует, пропускаем восстановление");
-            return;
-        }
-
-        // showSyncToast("Восстанавливаю синхронизацию после пробуждения...", 'loading');
-
-        // Проверка локальных изменений
-        if (hasLocalChanges || isUploadingData) {
-            console.log("⏸️ Пропускаем восстановление - есть локальные изменения или идет загрузка");
-            return;
-        }
-
-        const reloadParams = {
-            user_id,
-            getToken,
-            setItems,
-            setIsDownloadingData,
-            setSyncHighlight,
-            setWasSyncedOk,
-            lastReloadTimeRef,
-            highlightBufferRef,
-            highlightClearTimeoutRef,
-            isReloadingData,
-            setIsReloadingData
-        };
-        reloadAllItems(reloadParams);
-
-        setTimeout(() => {
-
-            setupSubscription();
-
-        }, 1000);
-
-        // Тест подписки с настраиваемой задержкой
-        setTimeout(async () => {
-            console.log("🧪 Запускаем тест подписки...");
-            log.start("Запускаем тест подписки...")
-            // toast("🔍 Проверяю подписку...", {
-            //     duration: 1500,
-            //     position: "bottom-center"
-            // });
-
-            const testParams = {
-                user_id,
-                deviceId,
-                getToken,
-                onPayloadRef
-            };
-
-            const isWorking = await testSubscription(testParams);
-
-            if (!isWorking) {
-                console.log("❌ Тест подписки провален!");
-
-                const shouldRestart = confirm(
-                    "Не удалось восстановить синхронизацию данных после пробуждения. Перезагрузить приложение?"
-                );
-
-                if (shouldRestart) {
-                    window.location.reload();
-                }
-            } else {
-                console.log("✅ Тест подписки успешен!");
-                log.success("Тест подписки успешен!")
-                // log.success("Тест подписки успешен!")
-            }
-        }, 3000);
-        // }, 0);
-        // });
-    };
-
-    // Функция проверки доступности сети
-    const checkNetworkConnectivity = async (): Promise<boolean> => {
-        try {
-            // Используем собственный Supabase API вместо Google
-            const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-            const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-            const response = await fetch(`${supabaseUrl}/rest/v1/`, {
-                method: 'HEAD',
-                headers: {
-                    'apikey': supabaseKey,
-                    'Authorization': `Bearer ${supabaseKey}`
-                },
-                signal: AbortSignal.timeout(5000)
-            });
-            // console.log("🌐 Supabase connectivity check:", response.status);
-            return response.ok;
-        } catch (error) {
-            // console.log("❌ Supabase connectivity failed:", error);
-            return false;
-        }
-    };
-
-    const lastReloadTimeRef = useRef<number>(0); //
-
-
-    const [isReloadingData, setIsReloadingData] = useState(false);
-    const highlightBufferRef = useRef<number[]>([]);
-    const highlightClearTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-
-    const setupSubscription = async () => {
-
-
-
-        const callId = Math.random().toFixed(3);
-        // console.log(`🔌 setupSubscription ВХОД #${callId} - isSettingUpSubscription: ${isSettingUpSubscription}`);
-
-        if (isSettingUpSubscription) {
-            // console.log(`⚠️ setupSubscription #${callId} ЗАБЛОКИРОВАН - уже выполняется`);
-            return;
-        }
-
-        isSetupInProgress = true; // ← сразу блокируем
-        // console.log(`🔒 setupSubscription #${callId} БЛОКИРУЕМ флаг`);
-        setIsSettingUpSubscription(true);
-        // console.log("🔒 Заблокировали setupSubscription");
-
-        try {
-            // Получаем JWT токен для realtime подписки
-
-            const token = await getToken({template: 'supabase'});
-            if (!token) {
-                // console.error('Не удалось получить токен для realtime подписки');
-                setIsSettingUpSubscription(false);
-
+        checkFullConnectivity().then(networkStatus => {
+            if (!networkStatus.isSupabaseReachable) {
+                log.warning("⚠️ Нет подключения к серверу - работаем в офлайн режиме");
+                // Можно показать пользователю статус офлайн
                 return;
             }
 
-            await realtimeSubscription(user_id ?? "", token, (payload) => {
+            log.success("Подключение к серверу установлено!");
 
-                // console.log("🎯 payload:", payload);
-                // console.log("📡 Вызываем subscribeToItems...");
-                // console.log("🎯 СОБЫТИЕ в setupSubscription:", payload.eventType, payload.new?.title);
+            if (!user_id) {
+                console.log("❌ user_id отсутствует, пропускаем восстановление");
+                return;
+            }
 
-                // ✅ ИГНОРИРОВАТЬ все тестовые записи
-                const removed = payload.old as Partial<ItemType>;
-                const incoming = (payload.new ?? payload.old) as Partial<ItemType>;
+            if (hasLocalChanges || isUploadingData) {
+                console.log("⏸️ Пропускаем восстановление - есть локальные изменения или идет загрузка");
+                return;
+            }
 
-                if (onPayloadRef.current) {
-                    onPayloadRef.current(payload);
-                }
 
-                // Показываем ВСЕ тестовые записи
-                if (incoming?.title?.startsWith('__SUBSCRIPTION_TEST_')) {
-                    // console.log("🧪 Это тестовая запись:", incoming.title);
-                    // console.log("🧪 Наша запись:", `__SUBSCRIPTION_TEST_${deviceId}__`);
+            reloadAllItems(undefined, () => {
+                console.log("✅ Обновление завершено!");
 
-                    if (incoming.title === `__SUBSCRIPTION_TEST_${deviceId}__`) {
-                        // console.log("✅ ЭТО НАША ЗАПИСЬ - обрабатываем");
-                    } else {
-                        // console.log("❌ ЭТО ЧУЖАЯ ЗАПИСЬ - игнорируем");
-                        return; // выходим без обработки
-                    }
-                }
+                setTimeout(() => {
+                    log.start("Настраиваем подписку...")
 
-                if (payload.eventType === "DELETE") {
-                    // const lastAction = [...actionLogRef.current]
-                    //     .reverse()
-                    //     .find(entry => entry.item.id === removed.id && entry.action === "Delete");
-                    // if (!lastAction) {
-                    //     reloadAllItems();
-                    // }
-                    // return;
-                }
+                    setupSubscription(() => {
+                        console.log("✅ Подписка настроена!");
+                        // Можно запустить что-то еще после подписки
 
-                if (!incoming?.id) return;
+                        // ✅ ДОБАВЛЯЕМ ТЕСТ ПОДПИСКИ ПРЯМО ЗДЕСЬ
+                        setTimeout(async () => {
+                            console.log("🧪 Запускаем тест подписки...");
+                            log.start("Запускаем тест подписки...")
 
-                if ((payload.eventType === "INSERT" || payload.eventType === "UPDATE") && incoming) {
-                    const localItems = JSON.parse(localStorage.getItem("items") || "[]");
-                    const local = localItems.find((item: ItemType) => item.id === incoming.id);
+                            await testSubscription((success) => {
+                                if (success) {
+                                    log.success("Тест подписки успешен!")
 
-                    if (!user_id) return;
+                                } else {
+                                    toast((t) => (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ fontWeight: 'bold', color: '#dc2626' }}>
+                                                ❌ Синхронизация не работает
+                                            </div>
+                                            <div style={{ fontSize: '14px', color: '#666' }}>
+                                                Не удалось восстановить синхронизацию данных после пробуждения
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+                                                <button
+                                                    onClick={() => {
+                                                        toast.dismiss(t.id);
+                                                        window.location.reload();
+                                                    }}
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        backgroundColor: '#dc2626',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    Перезагрузить
+                                                </button>
+                                                <button
+                                                    onClick={() => toast.dismiss(t.id)}
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        backgroundColor: '#e5e7eb',
+                                                        color: '#374151',
+                                                        border: 'none',
+                                                        borderRadius: '4px',
+                                                        cursor: 'pointer'
+                                                    }}
+                                                >
+                                                    Отмена
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ), {
+                                        duration: Infinity,
+                                        position: "top-right"
+                                    });
+                                }
+                            });
 
-                    if (!local) {
-                        // reloadAllItems(incoming.id);
-                        const reloadParams = {
-                            user_id,
-                            getToken,
-                            setItems,
-                            setIsDownloadingData,
-                            setSyncHighlight,
-                            setWasSyncedOk,
-                            lastReloadTimeRef,
-                            highlightBufferRef,
-                            highlightClearTimeoutRef,
-                            isReloadingData,
-                            setIsReloadingData
-                        };
+                        }, 1000);
 
-                        reloadAllItems(reloadParams, incoming.id);
+                    });
 
-                        return;
-                    }
-
-                    if (!incoming.updated_at || !local.updated_at) return;
-
-                    if (new Date(incoming.updated_at) > new Date(local.updated_at)) {
-                        // reloadAllItems(incoming.id);
-
-                        const reloadParams = {
-                            user_id,
-                            getToken,
-                            setItems,
-                            setIsDownloadingData,
-                            setSyncHighlight,
-                            setWasSyncedOk,
-                            lastReloadTimeRef,
-                            highlightBufferRef,
-                            highlightClearTimeoutRef,
-                            isReloadingData,
-                            setIsReloadingData
-                        };
-
-                        reloadAllItems(reloadParams, incoming.id);
-
-                    }
-                }
+                }, 1000);
             });
-            //console.log("✅ Подписка успешно настроена");
-        } catch (error) {
-            console.error("❌ Ошибка настройки подписки:", error);
-        } finally {
-            // Небольшая задержка перед разблокировкой
-            log.success("Подписка успешно настроена!")
-            setTimeout(() => {
-                setIsSettingUpSubscription(false);
-                isSetupInProgress = false;
-            }, 1000);
-        }
+        });
+
 
     };
-
-
-    // const [waitWake, setWaitWake] = useState(false);
-    // useEffect(() => {
-    //     if (waitWake && user_id) {
-    //         setWaitWake(false);
-    //         const setupParams = {
-    //             user_id,
-    //             deviceId,
-    //             getToken,
-    //             isSettingUpSubscription,
-    //             setIsSettingUpSubscription,
-    //             onPayloadRef
-    //         };
-    //         setupSubscription(setupParams);
-    //
-    //         const reloadParams = {
-    //             user_id,
-    //             getToken,
-    //             setItems,
-    //             setIsDownloadingData,
-    //             setSyncHighlight,
-    //             setWasSyncedOk,
-    //             lastReloadTimeRef,
-    //             highlightBufferRef,
-    //             highlightClearTimeoutRef,
-    //             isReloadingData,
-    //             setIsReloadingData
-    //         };
-    //
-    //         reloadAllItems(reloadParams);
-    //         // reloadAllItems();
-    //     }
-    // }, [waitWake, user_id]);
 
 
 

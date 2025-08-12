@@ -137,7 +137,27 @@ export const UploadData = () => {
 
     }, [hasLocalChanges, isUploadingData, isUserActive]);
 
-    // ... existing code до строки 136 ...
+
+
+    // const performSync = async () => {
+    //     // ✅ Сначала проверяем сеть:
+    //     if (!isFullyOnline) {
+    //         log.warning("🔴 Нет связи - сохраняем локально");
+    //         // Помечаем данные как "нужна синхронизация"
+    //         markItemsForSync(items);
+    //         return;
+    //     }
+    //
+    //     // Синхронизируем только если есть сеть
+    //     try {
+    //         await uploadToServer();
+    //         log.success("✅ Синхронизировано!");
+    //     } catch (error) {
+    //         log.error("❌ Ошибка синхронизации");
+    //     }
+    // };
+
+
 
     const performSync = async () => {
         if (isUploadingData || !hasLocalChanges || !user_id) {

@@ -1,5 +1,7 @@
 const {app, BrowserWindow, Notification, screen, Tray, shell, Menu, ipcMain, dialog} = require("electron");
 
+
+
 const path = require("path");
 const fs = require("fs");
 const {nativeImage} = require("electron");
@@ -14,7 +16,7 @@ const {dockIconHandler} = require('./iconDock');
 const {setupPowerMonitor} = require("./powerMonitor");
 const {calendar} = require("@heroui/react");
 
-const HOST = "2000";
+const HOST = "3103";
 const ENABLE_TRAY = true; // ✅ Если false — трей не создаётся
 const ENABLE_DOCK = true; // ✅ Если false — убираем из Dock (только macOS)
 
@@ -69,14 +71,12 @@ async function createMainWindow() {
         mainWindow = win;
         setupPowerMonitor(win);
 
-        //win.webContents.session.clearStorageData({
-        //    storages: ['cookies', 'serviceworkers']
-        //}).then(() => {
-        //    console.log('✅ Очистили старые cookies и service workers');
-        //    win.loadURL("http://localhost:" + HOST);
-        //});
+
+
+
 
         win.loadURL("http://localhost:" + HOST);
+
 
         win.webContents.setWindowOpenHandler(({ url }) => {
             shell.openExternal(url);
