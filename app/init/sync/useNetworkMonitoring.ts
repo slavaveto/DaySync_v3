@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { log } from "@/app/init/logger";
+import { toast } from "react-hot-toast";
+import { showNetworkToast } from "./showNetworkToast";
 
 interface UseNetworkMonitoringProps {
     onNetworkChange?: (status: { isOnline: boolean; isSupabaseReachable: boolean; isFullyOnline: boolean }) => void;
@@ -22,8 +24,48 @@ export const useNetworkMonitoring = ({
     const [isSupabaseReachable, setIsSupabaseReachable] = useState(true);
     const [lastCheck, setLastCheck] = useState<Date | null>(null);
 
-    // Проверка доступности Supabase (из твоего кода)
-    const checkSupabaseConnectivity = async (): Promise<boolean> => {
+    // Ссылки на активные toast для управления ими
+    const offlineToastRef = useRef<string | null>(null);
+    const onlineToastRef = useRef<string | null>(null);
+
+    // Функция для показа toast о потере сети
+    const showOfflineToast = useCallback(() => {
+        // Убираем предыдущий онлайн toast если есть
+        if (onlineToastRef.current) {
+            toast.dismiss(onlineToastRef.current);
+            onlineToastRef.current = null;
+        }
+
+        const toastId = showNetworkToast({
+            type: 'offline',
+            title: 'Нет соединения с интернетом',
+            message: 'Работаем в офлайн режиме',
+            duration: Infinity
+        });
+
+        offlineToastRef.current = toastId;
+    }, []);
+
+    // Функция для показа toast о восстановлении сети
+    const showOnlineToast = useCallback(() => {
+        // Убираем предыдущий офлайн toast если есть
+        if (offlineToastRef.current) {
+            toast.dismiss(offlineToastRef.current);
+            offlineToastRef.current = null;
+        }
+
+        const toastId = showNetworkToast({
+            type: 'online',
+            title: 'Соединение восстановлено',
+            message: 'Синхронизация данных возобновлена',
+            duration: 4000
+        });
+
+        onlineToastRef.current = toastId;
+    }, []);
+
+    // Проверка доступности Supabase
+    const checkSupabaseConnectivity = useCallback(async (): Promise<boolean> => {
         try {
             const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
             const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -39,10 +81,10 @@ export const useNetworkMonitoring = ({
         } catch (error) {
             return false;
         }
-    };
+    }, []);
 
     // Полная проверка сети
-    const checkFullConnectivity = async (): Promise<NetworkCheckResult> => {
+    const checkFullConnectivity = useCallback(async (): Promise<NetworkCheckResult> => {
         const basicOnline = navigator.onLine;
         const supabaseOk = basicOnline ? await checkSupabaseConnectivity() : false;
 
@@ -51,12 +93,17 @@ export const useNetworkMonitoring = ({
             isOnline: basicOnline,
             isSupabaseReachable: supabaseOk
         };
-    };
+    }, [checkSupabaseConnectivity]);
+
+    // Стабилизируем колбеки
+    const stableOnNetworkChange = useCallback(onNetworkChange || (() => {}), [onNetworkChange]);
+    const stableOnConnectionRestored = useCallback(onConnectionRestored || (() => {}), [onConnectionRestored]);
+    const stableOnConnectionLost = useCallback(onConnectionLost || (() => {}), [onConnectionLost]);
 
     // Обработчики событий браузера
     useEffect(() => {
         const handleOnline = async () => {
-            log.success("🌐 Интернет восстановлен!");
+            // log.success("🌐 Интернет восстановлен!");
             setIsOnline(true);
 
             const supabaseOk = await checkSupabaseConnectivity();
@@ -68,22 +115,29 @@ export const useNetworkMonitoring = ({
                 isFullyOnline: supabaseOk
             };
 
+            // ✅ Показываем toast о восстановлении
+            if (supabaseOk) {
+                showOnlineToast();
+            }
+
             // ✅ Вызываем колбеки:
-            if (onNetworkChange) onNetworkChange(newStatus);
-            if (supabaseOk && onConnectionRestored) onConnectionRestored();
+            if (onNetworkChange) stableOnNetworkChange(newStatus);
+            if (supabaseOk && onConnectionRestored) stableOnConnectionRestored();
 
             if (supabaseOk) {
-                log.success("✅ Supabase доступен - можно синхронизироваться!");
+                // log.success("✅ Supabase доступен - можно синхронизироваться!");
             } else {
-                log.warning("⚠️ Интернет есть, но Supabase недоступен");
+                // log.warning("⚠️ Интернет есть, но Supabase недоступен");
             }
         };
 
-
         const handleOffline = () => {
-            log.warning("🔴 Потеряно соединение с интернетом");
+            // log.warning("🔴 Потеряно соединение с интернетом");
             setIsOnline(false);
             setIsSupabaseReachable(false);
+
+            // ✅ Показываем toast о потере сети
+            showOfflineToast();
 
             const newStatus = {
                 isOnline: false,
@@ -92,24 +146,23 @@ export const useNetworkMonitoring = ({
             };
 
             // ✅ Вызываем колбеки:
-            if (onNetworkChange) onNetworkChange(newStatus);
-            if (onConnectionLost) onConnectionLost();
+            if (onNetworkChange) stableOnNetworkChange(newStatus);
+            if (onConnectionLost) stableOnConnectionLost();
         };
 
         window.addEventListener('online', handleOnline);
         window.addEventListener('offline', handleOffline);
 
-        // Первоначальная проверка
-        checkFullConnectivity().then(result => {
-            setIsOnline(result.isOnline);
-            setIsSupabaseReachable(result.isSupabaseReachable);
+        // Первоначальная проверка БЕЗ setLastCheck
+        checkSupabaseConnectivity().then(supabaseOk => {
+            setIsSupabaseReachable(supabaseOk);
         });
 
         return () => {
             window.removeEventListener('online', handleOnline);
             window.removeEventListener('offline', handleOffline);
         };
-    }, [onNetworkChange, onConnectionRestored, onConnectionLost]);
+    }, [checkSupabaseConnectivity, showOnlineToast, showOfflineToast, stableOnNetworkChange, stableOnConnectionRestored, stableOnConnectionLost]);
 
     // Периодическая проверка Supabase (каждые 30 секунд если онлайн)
     useEffect(() => {
@@ -127,20 +180,22 @@ export const useNetworkMonitoring = ({
                 };
 
                 // ✅ Колбек при изменении:
-                if (onNetworkChange) onNetworkChange(newStatus);
+                if (onNetworkChange) stableOnNetworkChange(newStatus);
 
                 if (supabaseOk) {
-                    log.success("✅ Supabase снова доступен!");
-                    if (onConnectionRestored) onConnectionRestored();
+                    // log.success("✅ Supabase снова доступен!");
+                    showOnlineToast();
+                    if (onConnectionRestored) stableOnConnectionRestored();
                 } else {
-                    log.warning("⚠️ Потеряна связь с Supabase");
-                    if (onConnectionLost) onConnectionLost();
+                    // log.warning("⚠️ Потеряна связь с Supabase");
+                    showOfflineToast();
+                    if (onConnectionLost) stableOnConnectionLost();
                 }
             }
         }, 30000);
 
         return () => clearInterval(interval);
-    }, [isOnline, isSupabaseReachable, onNetworkChange, onConnectionRestored, onConnectionLost])
+    }, [isOnline, isSupabaseReachable, checkSupabaseConnectivity, showOnlineToast, showOfflineToast, stableOnNetworkChange, stableOnConnectionRestored, stableOnConnectionLost]);
 
     return {
         isOnline,

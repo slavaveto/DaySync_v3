@@ -3,7 +3,7 @@ import {useMainContext} from "@/app/context";
 import {log} from "@/app/init/logger";
 import {useAuth} from '@clerk/nextjs';
 import {toast} from "react-hot-toast";
-
+import {Button} from "@heroui/react";
 
 import usePersistentState from "@/app/init/usePersistentState";
 import {useDevice} from "@/app/init/providers/MobileDetect";
@@ -17,7 +17,7 @@ export const SyncData = () => {
 
     const {
         items, setItems, userId, isUserActive, isUploadingData, hasLocalChanges, clearAllToasts,
-        setIsDownloadingData, setSyncHighlight
+        setIsDownloadingData, setSyncHighlight, setFirstLoadFadeIn
     } = useMainContext();
 
     const {getToken} = useAuth();
@@ -33,7 +33,7 @@ export const SyncData = () => {
         `device_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     );
 
-    const { isOnline, isSupabaseReachable, isFullyOnline, checkFullConnectivity } = useNetworkMonitoring({
+    const {isOnline, isSupabaseReachable, isFullyOnline, checkFullConnectivity} = useNetworkMonitoring({
         onConnectionRestored: () => {
             log.success("🚀 Связь восстановлена - запускаем синхронизацию!");
             // Автоматически синхронизируем при восстановлении
@@ -91,6 +91,8 @@ export const SyncData = () => {
 
                     setupSubscription(() => {
                         console.log("✅ Подписка настроена!");
+
+
                         // Можно запустить что-то еще после подписки
                     });
 
@@ -147,8 +149,6 @@ export const SyncData = () => {
         };
     }, [user_id, hasLocalChanges, isUploadingData]);
 
-
-
     // Функция восстановления подписки с тестом
     const performSubscriptionRecovery = () => {
         log.start("Проверяем подключение к сети...");
@@ -172,7 +172,6 @@ export const SyncData = () => {
                 return;
             }
 
-
             reloadAllItems(undefined, () => {
                 console.log("✅ Обновление завершено!");
 
@@ -193,50 +192,8 @@ export const SyncData = () => {
                                     log.success("Тест подписки успешен!")
 
                                 } else {
-                                    toast((t) => (
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                            <div style={{ fontWeight: 'bold', color: '#dc2626' }}>
-                                                ❌ Синхронизация не работает
-                                            </div>
-                                            <div style={{ fontSize: '14px', color: '#666' }}>
-                                                Не удалось восстановить синхронизацию данных после пробуждения
-                                            </div>
-                                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                                                <button
-                                                    onClick={() => {
-                                                        toast.dismiss(t.id);
-                                                        window.location.reload();
-                                                    }}
-                                                    style={{
-                                                        padding: '6px 12px',
-                                                        backgroundColor: '#dc2626',
-                                                        color: 'white',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    Перезагрузить
-                                                </button>
-                                                <button
-                                                    onClick={() => toast.dismiss(t.id)}
-                                                    style={{
-                                                        padding: '6px 12px',
-                                                        backgroundColor: '#e5e7eb',
-                                                        color: '#374151',
-                                                        border: 'none',
-                                                        borderRadius: '4px',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    Отмена
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ), {
-                                        duration: Infinity,
-                                        position: "top-right"
-                                    });
+
+                                    showSyncErrorToast()
                                 }
                             });
 
@@ -248,10 +205,75 @@ export const SyncData = () => {
             });
         });
 
-
     };
 
+    // Функция для показа toast об ошибке синхронизации
+    const showSyncErrorToast = () => {
+        toast((t) => (
+            <div
+                style={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                padding: '10px',
+                minWidth: '300px'
+            }}>
+                {/* Крестик в правом верхнем углу */}
+                <button
+                    onClick={() => toast.dismiss(t.id)}
+                    style={{
+                        position: 'absolute',
+                        top: '0px',
+                        right: '0px',
+                        background: 'none',
+                        border: 'none',
+                        fontSize: '18px',
+                        cursor: 'pointer',
+                        color: '#666',
+                        lineHeight: '1'
+                    }}
+                    title="Закрыть"
+                >
+                    ×
+                </button>
 
+                {/* Основной контент */}
+                <div className={"text-danger-500"} style={{
+                    fontWeight: 'bold',
+                    paddingRight: '20px' // отступ от крестика
+                }}>
+                    ❌ Синхронизация не работает
+                </div>
+                <div style={{
+                    fontSize: '14px',
+                    color: '#666',
+                    lineHeight: '1.4'
+                }}>
+                    Не удалось восстановить подписку!
+                </div>
+
+                {/* Кнопка перезагрузки */}
+                <Button
+                    color={"danger"}
+                    className={"!w-[150px]"}
+                    onClick={() => {
+                    toast.dismiss(t.id);
+                    setTimeout(() => {
+                        setFirstLoadFadeIn(false);
+                        setTimeout(() => location.reload(), 500);
+                    }, 500);
+                }}
+                >
+                    Перегрузить
+                </Button>
+            </div>
+        ), {
+            duration: Infinity,
+            position: "top-right",
+            className: "!bg-content2"
+        });
+    }
 
     return null;
 };
