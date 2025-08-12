@@ -2,7 +2,8 @@
 import { createAuthenticatedClient } from "@/app/init/dbase/supabaseClient";
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
-let channelRef: RealtimeChannel | null = null;
+// ✅ Глобальные переменные для отслеживания активных подписок
+let activeChannels: RealtimeChannel[] = [];
 let authClient: SupabaseClient | null = null;
 
 export async function realtimeSubscription(
@@ -10,27 +11,42 @@ export async function realtimeSubscription(
     jwtToken: string,
     onPayload: (payload: any) => void
 ) {
+    console.log('🔐 Настройка realtime подписки для user_id:', user_id);
 
-    // console.log('🔐 Настройка realtime с JWT токеном:', jwtToken.substring(0, 50) + '...');
-    // console.log("📡 subscribeToItems начинает работу для user_id:", user_id);
+    // ✅ КРИТИЧНО: Сначала удаляем ВСЕ старые каналы
+    console.log('🛑 Очищаем старые каналы, количество:', activeChannels.length);
 
-    // Создаем аутентифицированный клиент для realtime
+    for (const oldChannel of activeChannels) {
+        try {
+            await oldChannel.unsubscribe();
+            console.log('✅ Старый канал отписан:', oldChannel.topic);
+        } catch (error) {
+            console.warn('⚠️ Ошибка при отписке канала:', error);
+        }
+    }
+
+    // Очищаем массив активных каналов
+    activeChannels = [];
+
+    // ✅ Создаем новый аутентифицированный клиент
     authClient = createAuthenticatedClient(jwtToken);
 
-    // console.log('📡 Подписываемся на realtime для user_id:', user_id);
-
-    const existingChannel = authClient.getChannels().find(
-        (ch: RealtimeChannel) => ch.topic === "realtime:items_sync"
+    // ✅ Дополнительная проверка: удаляем каналы из нового клиента тоже
+    const existingChannels = authClient.getChannels().filter(
+        (ch: RealtimeChannel) => ch.topic.includes("items_sync")
     );
 
-    //console.log("📡 Channels before subscribe:", supabase.getChannels().map(ch => ch.topic));
-
-    if (existingChannel) {
-        await authClient.removeChannel(existingChannel);
-        // console.log("🛑 Удаляем существующий канал:", existingChannel.topic);
-    } else {
-        // console.log("✅ Существующих каналов не найдено");
+    for (const existingChannel of existingChannels) {
+        try {
+            await authClient.removeChannel(existingChannel);
+            console.log('🛑 Удален существующий канал из нового клиента:', existingChannel.topic);
+        } catch (error) {
+            console.warn('⚠️ Ошибка удаления существующего канала:', error);
+        }
     }
+
+    // ✅ Создаем новый канал
+    console.log('📡 Создаем новую подписку...');
 
     const channel = authClient
         .channel("items_sync")
@@ -42,37 +58,51 @@ export async function realtimeSubscription(
                 table: "items",
             },
             (payload: any) => {
-                // console.log('🎯 Получено realtime событие:', payload.eventType, payload);
-                // console.log("🎯 RAW PAYLOAD в subscribeToItems:", payload);
-                // console.log("🎯 Event type:", payload.eventType);
-                // console.log("🎯 New data:", payload.new);
-                // console.log("🎯 Old data:", payload.old);
+                console.log('🎯 Получено realtime событие:', payload.eventType, 'для записи ID:', payload.new?.id || payload.old?.id);
 
+                // ✅ Проверяем user_id
                 const incomingUserId =
                     (payload.new as Record<string, any>)?.user_id ||
                     (payload.old as Record<string, any>)?.user_id;
 
-                // console.log("🎯 incomingUserId:", incomingUserId);
-                // console.log("🎯 наш user_id:", user_id);
-
-                // console.log('👤 User ID в событии:', incomingUserId, 'ожидаем:', user_id);
-
                 if (incomingUserId !== user_id) {
-
-                    // console.log('🟥 Игнорируем событие чужого пользователя');
+                    console.log('🟥 Игнорируем событие чужого пользователя:', incomingUserId);
                     return;
                 }
-                // console.log("✅ Передаем событие в onPayload");
-                onPayload(payload); // ✅ Передаём наружу только события своего user_id
+
+                console.log('✅ Передаем событие в обработчик');
+                onPayload(payload);
             }
         )
         .subscribe((status, error) => {
-            // console.log('📡 Статус realtime подписки:', status);
+            console.log('📡 Статус realtime подписки:', status);
             if (error) {
-                // console.error("❌ Subscription error:", error);
+                console.error("❌ Ошибка подписки:", error);
+            } else if (status === 'SUBSCRIBED') {
+                console.log('🟢 Подписка успешно активирована!');
             }
         });
 
-    channelRef = channel;
-    // console.log(`✅ Подписка активирована для user_id: ${user_id}`);
+    // ✅ ВАЖНО: Сохраняем ссылку на новый канал
+    activeChannels.push(channel);
+
+    console.log(`✅ Подписка настроена для user_id: ${user_id}, активных каналов: ${activeChannels.length}`);
+}
+
+// ✅ Дополнительная функция для принудительной очистки всех подписок
+export async function clearAllSubscriptions() {
+    console.log('🧹 Принудительная очистка всех подписок...');
+
+    for (const channel of activeChannels) {
+        try {
+            await channel.unsubscribe();
+        } catch (error) {
+            console.warn('⚠️ Ошибка при очистке канала:', error);
+        }
+    }
+
+    activeChannels = [];
+    authClient = null;
+
+    console.log('✅ Все подписки очищены');
 }
