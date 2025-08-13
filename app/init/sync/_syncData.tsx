@@ -57,6 +57,52 @@ export const SyncData = () => {
     //     }
     // }, [isFullyOnline, hasLocalChanges]);
 
+    useEffect(() => {
+        if (!isMobile) return; // Только для мобилки!
+
+        function onVisibilityChange() {
+            if (document.visibilityState !== 'visible') return;
+
+            requestAnimationFrame(() => {
+                // Здесь state гарантированно актуальный
+                if (hasLocalChanges || isUploadingData) return;
+
+                // 🔄 Сначала проверяем сеть!
+                log.start("RELOAD, проверяем подключение к сети...");
+
+                checkFullConnectivity().then(networkStatus => {
+                    if (!networkStatus.isSupabaseReachable) {
+                        log.warning("⚠️ Нет подключения к серверу - работаем в офлайн режиме");
+                        // Можно показать пользователю статус офлайн
+                        return;
+                    }
+
+                    log.success("Подключение к серверу установлено!");
+
+                    reloadAllItems(undefined, () => {
+                        console.log("✅ Обновление завершено!");
+
+                        setTimeout(() => {
+                            log.start("Настраиваем подписку...")
+
+                            setupSubscription(() => {
+                                console.log("✅ Подписка настроена!");
+
+                                // Можно запустить что-то еще после подписки
+                            });
+
+                        }, 1000);
+                    });
+                });
+            });
+        }
+
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
+    }, [isMobile, user_id, hasLocalChanges, isUploadingData]);
+
     const {reloadAllItems} = useReloadAllItems();
     const {testSubscription} = useTestSubscription({
         deviceId,

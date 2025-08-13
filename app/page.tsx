@@ -9,10 +9,11 @@ import {SignedIn, SignedOut, SignIn, SignOutButton} from "@clerk/nextjs";
 import {Button, Spinner} from "@heroui/react";
 import DataInitializer from "@/app/init/dbase/dataInitializer";
 import {useWindowSize} from "@/app/init/useWindowSize";
-import {LogOut, Trash2} from "lucide-react";
+import {LogOut, Trash2, Upload} from "lucide-react";
 import {useMainContext} from "@/app/context";
 import {log} from "@/app/init/logger";
 import {SyncData} from "@/app/init/sync/_syncData";
+import {UploadData} from "@/app/init/sync/_uploadData";
 import {CustomProgress} from "@/app/init/sync/CustomProgress";
 
 import {QuickNotes} from "@/app/common/QuickNotes";
@@ -102,7 +103,9 @@ export default function Home() {
 
             <SignedIn>
                 <DataInitializer/>
+
                 <SyncData/>
+                <UploadData/>
 
                 {isDesktop && (
                     <>

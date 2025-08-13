@@ -76,8 +76,6 @@ export const useSetupSubscription = ({
 
                 if (!incoming?.id) return;
 
-                clearAllToasts()
-                log("Сработал Realtime!");
 
                 if ((payload.eventType === "INSERT" || payload.eventType === "UPDATE") && incoming) {
                     const localItems = JSON.parse(localStorage.getItem("items") || "[]");
@@ -86,6 +84,8 @@ export const useSetupSubscription = ({
                     if (!userId) return;
 
                     if (!local) {
+                        clearAllToasts()
+                        log("Сработал Realtime! Новая запись!");
                         reloadAllItems(incoming.id);
                         return;
                     }
@@ -93,6 +93,8 @@ export const useSetupSubscription = ({
                     if (!incoming.updated_at || !local.updated_at) return;
 
                     if (new Date(incoming.updated_at) > new Date(local.updated_at)) {
+                        clearAllToasts()
+                        log("Сработал Realtime! Обновление!");
                         reloadAllItems(incoming.id);
                     }
                 }

@@ -103,6 +103,7 @@ export function QuickNotes({ height = 300 }: QuickNotesProps) {
             }
 
             setIsUserActive(false);
+            localRef.current.blur();
         }
     };
 
