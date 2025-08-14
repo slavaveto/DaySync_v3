@@ -35,14 +35,14 @@ export const SyncData = () => {
 
     const {isOnline, isSupabaseReachable, isFullyOnline, checkFullConnectivity} = useNetworkMonitoring({
         onConnectionRestored: () => {
-            log.success("🚀 Связь восстановлена - запускаем синхронизацию!");
+            // log.success("🚀 Связь восстановлена - запускаем синхронизацию!");
             // Автоматически синхронизируем при восстановлении
             if (hasLocalChanges) {
                 // Запустить синхронизацию
             }
         },
         onConnectionLost: () => {
-            log.warning("💾 Работаем в офлайн режиме");
+            // log.warning("💾 Работаем в офлайн режиме");
         },
         onNetworkChange: (status) => {
             console.log("🌐 Статус сети изменился:", status);

@@ -58,13 +58,9 @@ export default function RootLayout({children}: { children: React.ReactNode }) {
             <HeroUiProvider>
                 <ThemeProvider>
                     <DeviceProvider>
-
                         <MainContextProvider>
-
                             {children}
-
                         </MainContextProvider>
-
                     </DeviceProvider>
                 </ThemeProvider>
             </HeroUiProvider>

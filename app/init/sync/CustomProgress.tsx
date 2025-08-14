@@ -1,22 +1,22 @@
 import React from 'react';
 import clsx from 'clsx';
+import {useMainContext} from "@/app/context";
+import {useWindowSize} from "@/app/init/useWindowSize";
 
-interface CustomProgressProps {
-    value?: number; // 0-100, где 100 = полная полоска, 0 = пустая
-    isIndeterminate?: boolean;
-    isUploadingData?: boolean;
-    isDownloadingData?: boolean;
-    isUserActive?: boolean;
-    winWidth: number;
-}
 
-export const CustomProgress: React.FC<CustomProgressProps> = ({
-                                                                  value = 0,
-                                                                  isUploadingData = false,
-                                                                  isDownloadingData = false,
-                                                                  isUserActive = false,
-                                                                  winWidth
-                                                              }) => {
+export const CustomProgress: React.FC = () => {
+
+    const {winWidth, winHeight} = useWindowSize();
+
+    const {isUploadingData, isUserActive, syncTimeoutProgress, isDownloadingData
+    } = useMainContext();
+
+
+    // Вычисляем значение value внутри компонента
+    const value = !isUploadingData ? syncTimeoutProgress : undefined;
+    // Безопасное значение для вычислений (0 если undefined)
+    const safeValue = value ?? 0;
+
     // Определяем цвет индикатора
     const getIndicatorColor = () => {
         if (isUploadingData) return "bg-warning-300";
@@ -43,10 +43,10 @@ export const CustomProgress: React.FC<CustomProgressProps> = ({
                     indeterminateAnimation
                 )}
                 style={{
-                    width: isIndeterminate ? '100%' : `${Math.max(0, Math.min(100, value))}%`,
+                    width: isIndeterminate ? '100%' : `${Math.max(0, Math.min(100, safeValue))}%`,
                     transform: isIndeterminate ? 'translateX(-100%)' : 'none',
                     animation: isIndeterminate ? 'indeterminate 2s infinite ease-in-out' : 'none',
-                    opacity: isIndeterminate || isUserActive || value > 0 ? 1 : 0
+                    opacity: isIndeterminate || isUserActive || safeValue > 0 ? 1 : 0
                 }}
             />
 

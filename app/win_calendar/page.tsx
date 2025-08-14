@@ -128,11 +128,7 @@ function CalendarContent() {
                 >
 
                     <CustomProgress
-                        value={!isUploadingData ? syncTimeoutProgress : undefined}
-                        isUploadingData={isUploadingData}
-                        isDownloadingData={isDownloadingData}
-                        isUserActive={isUserActive}
-                        winWidth={winWidth}
+
                     />
 
 

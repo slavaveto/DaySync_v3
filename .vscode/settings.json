@@ -9,5 +9,6 @@
         "**/.clerk": true,
         "**/*.tsbuildinfo": true,
         "**/next-env.d.ts": true,
-        ".vscode": true
+        ".vscode": true,
+        ".idea": true
     }}
