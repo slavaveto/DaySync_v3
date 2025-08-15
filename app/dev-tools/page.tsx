@@ -15,25 +15,25 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
-interface ProjectFile {
+interface ProjectItem {
     id: string;
     name: string;
     path: string;
-    type: 'component' | 'page' | 'hook' | 'utility' | 'context' | 'types';
-    imports: string[];
-    exports: string[];
+    type: 'file' | 'folder';
+    fileType?: 'component' | 'page' | 'hook' | 'utility' | 'context' | 'types';
+    imports?: string[];
+    exports?: string[];
 }
 
-
 interface ProjectNode extends Node {
-    data: ProjectFile & {
+    data: ProjectItem & {
         label: string;
-        isHidden?: boolean;
+        isClickable?: boolean;
     };
 }
 
-// Функция для определения типа файла
-function getFileType(filePath: string, fileName: string): ProjectFile['type'] {
+// Определение типа файла
+function getFileType(fileName: string): ProjectItem['fileType'] {
     if (fileName.includes('page.tsx')) return 'page';
     if (fileName.startsWith('use') && fileName.endsWith('.ts')) return 'hook';
     if (fileName.toLowerCase().includes('context')) return 'context';
@@ -41,9 +41,9 @@ function getFileType(filePath: string, fileName: string): ProjectFile['type'] {
     return 'component';
 }
 
-// Функция для получения цвета узла
-function getNodeColor(type: ProjectFile['type']): string {
-    switch (type) {
+// Цвета для файлов
+function getFileColor(fileType: ProjectItem['fileType']): string {
+    switch (fileType) {
         case 'page': return '#2196F3';
         case 'component': return '#4CAF50';
         case 'hook': return '#9C27B0';
@@ -54,240 +54,184 @@ function getNodeColor(type: ProjectFile['type']): string {
     }
 }
 
-// Простой анализатор imports (пока без полноценного AST)
-function extractImports(content: string): string[] {
-    const importRegex = /import.*from\s+['"]([^'"]+)['"]/g;
-    const imports: string[] = [];
-    let match;
-
-    while ((match = importRegex.exec(content)) !== null) {
-        const importPath = match[1];
-        if (importPath.startsWith('./') || importPath.startsWith('../') || importPath.startsWith('@/')) {
-            imports.push(importPath);
-        }
-    }
-
-    return imports;
-}
-
-// Функция для сканирования файлов проекта
-// Функция для сканирования файлов проекта
-async function scanProjectFiles(): Promise<ProjectFile[]> {
-    try {
-        const projectFiles: ProjectFile[] = [];
-
-        // Рекурсивно сканируем папку app
-        const scanDirectory = async (dirPath: string) => {
-            try {
-                const response = await fetch(`/api/scan-files?path=${encodeURIComponent(dirPath)}`);
-                if (!response.ok) throw new Error('Failed to scan directory');
-                const files = await response.json();
-
-                for (const file of files) {
-                    if (file.type === 'file' && /\.(tsx?|jsx?)$/.test(file.name)) {
-                        const fileName = file.name;
-                        const filePath = file.path;
-                        const fileType = getFileType(filePath, fileName);
-
-                        // Читаем содержимое файла для анализа imports
-                        const contentResponse = await fetch(`/api/read-file?path=${encodeURIComponent(filePath)}`);
-                        let imports: string[] = [];
-
-                        if (contentResponse.ok) {
-                            const content = await contentResponse.text();
-                            imports = extractImports(content);
-                        }
-
-                        projectFiles.push({
-                            id: filePath.replace(/[^a-zA-Z0-9]/g, '-'),
-                            name: fileName,
-                            path: filePath,
-                            type: fileType,
-                            imports: imports,
-                            exports: [fileName.replace(/\.(tsx?|jsx?)$/, '')],
-                        });
-                    } else if (file.type === 'directory') {
-                        await scanDirectory(file.path);
+// Структура проекта (статичная для начала)
+const projectStructure = {
+    'app': {
+        files: ['page.tsx', 'layout.tsx', 'context.tsx', 'types.ts', 'globals.css'],
+        folders: {
+            'common': {
+                files: ['QuickNotes.tsx', 'context_dnd.tsx', 'context_misc.tsx'],
+                folders: {}
+            },
+            'init': {
+                files: ['logger.tsx', 'usePersistentState.ts', 'useWindowSize.ts'],
+                folders: {
+                    'sync': {
+                        files: ['CustomProgress.tsx', '_syncData.tsx', '_uploadData.tsx', 'usePerformUpload.ts', 'useSetupSubscription.ts', 'realtimeSubscription.ts', 'useNetworkMonitoring.ts', 'showNetworkToast.tsx', 'useTestSubscription.ts', 'useReloadAllItems.tsx', 'compareWithRemote.ts'],
+                        folders: {}
+                    },
+                    'dbase': {
+                        files: ['dataInitializer.tsx', 'supabaseClient.ts', 'initialData.ts'],
+                        folders: {}
+                    },
+                    'providers': {
+                        files: ['ThemeToggle.tsx', 'mobDtToggle.tsx', 'HeroUIProvider.tsx', 'ClerkProvider.tsx', 'MobileDetect.tsx', 'ThemeProvider.tsx', 'themeScript.ts', 'themeIcons.tsx'],
+                        folders: {}
                     }
                 }
-            } catch (error) {
-                console.error('Error scanning directory:', dirPath, error);
+            },
+            'main': {
+                files: [],
+                folders: {}
+            },
+            'mobile': {
+                files: [],
+                folders: {}
+            },
+            'win_calendar': {
+                files: ['page.tsx'],
+                folders: {}
+            },
+            'win_money': {
+                files: [],
+                folders: {}
             }
-        };
-
-        await scanDirectory('app');
-        return projectFiles;
-
-    } catch (error) {
-        console.error('Error scanning project files:', error);
-        return [];
+        }
     }
+};
+
+// Получение элементов текущего уровня
+function getCurrentLevelItems(path: string): ProjectItem[] {
+    const pathParts = path.split('/');
+    let current: any = projectStructure;
+
+    for (const part of pathParts) {
+        current = current[part];
+        if (!current) return [];
+    }
+
+    const items: ProjectItem[] = [];
+
+    // Добавляем файлы
+    if (current.files) {
+        current.files.forEach((fileName: string) => {
+            items.push({
+                id: `${path}/${fileName}`,
+                name: fileName,
+                path: `${path}/${fileName}`,
+                type: 'file',
+                fileType: getFileType(fileName),
+                imports: [],
+                exports: []
+            });
+        });
+    }
+
+    // Добавляем папки
+    if (current.folders) {
+        Object.keys(current.folders).forEach(folderName => {
+            items.push({
+                id: `${path}/${folderName}`,
+                name: folderName,
+                path: `${path}/${folderName}`,
+                type: 'folder'
+            });
+        });
+    }
+
+    return items;
 }
 
 export default function ProjectVisualizerPage() {
-    const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
-    const [nodes, setNodes, onNodesChange] = useNodesState([]);  // ← Убираем типы, React Flow сам разберется
+    const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-    const [hiddenNodes, setHiddenNodes] = useState<Set<string>>(new Set());
-    const [isLoading, setIsLoading] = useState(true);
+    const [currentPath, setCurrentPath] = useState<string>('app');
+    const [breadcrumbs, setBreadcrumbs] = useState<string[]>(['app']);
+    const [isLoading, setIsLoading] = useState(false);
 
-    // Генерация узлов и связей из файлов проекта
-    const generateNodesAndEdges = useCallback((files: ProjectFile[]) => {
+    // Генерация узлов для текущего уровня
+    const generateNodesForLevel = useCallback((path: string) => {
+        const items = getCurrentLevelItems(path);
         const newNodes: ProjectNode[] = [];
-        const newEdges: Edge[] = [];
 
-        // Создаем узлы
-        files.forEach((file, index) => {
-            const x = (index % 8) * 200 + 100; // Размещаем в сетке
-            const y = Math.floor(index / 8) * 150 + 100;
+        items.forEach((item, index) => {
+            const x = (index % 6) * 200 + 100;
+            const y = Math.floor(index / 6) * 150 + 100;
+
+            const isFolder = item.type === 'folder';
+            const color = isFolder ? '#FFA726' : getFileColor(item.fileType);
 
             newNodes.push({
-                id: file.id,
+                id: item.id,
                 type: 'default',
                 position: { x, y },
                 data: {
-                    ...file,
-                    label: file.name,
+                    ...item,
+                    label: isFolder ? `📁 ${item.name}` : item.name,
+                    isClickable: isFolder
                 },
                 style: {
-                    background: getNodeColor(file.type),
+                    background: color,
                     color: 'white',
-                    border: `2px solid ${getNodeColor(file.type)}`,
+                    border: `2px solid ${color}`,
                     borderRadius: 8,
-                    fontSize: 12,
+                    fontSize: 14,
                     fontWeight: 'bold',
-                },
-            });
-        });
-
-        // Создаем связи на основе imports (упрощенная логика)
-        files.forEach((file) => {
-            file.imports.forEach((importPath) => {
-                // Ищем соответствующий файл для импорта
-                const targetFile = files.find(f =>
-                    importPath.includes(f.name.replace(/\.(tsx?|jsx?)$/, '')) ||
-                    importPath.includes(f.path.replace('app/', '').replace(/\.(tsx?|jsx?)$/, ''))
-                );
-
-                if (targetFile && targetFile.id !== file.id) {
-                    newEdges.push({
-                        id: `${file.id}-${targetFile.id}`,
-                        source: file.id,
-                        target: targetFile.id,
-                        type: 'smoothstep',
-                        animated: true,
-                        style: { stroke: '#666' },
-                        label: 'imports',
-                    });
+                    cursor: isFolder ? 'pointer' : 'default',
+                    minWidth: 120,
+                    textAlign: 'center'
                 }
             });
         });
 
         setNodes(newNodes);
-        setEdges(newEdges);
+        setEdges([]); // Пока без связей между уровнями
     }, [setNodes, setEdges]);
 
-    // Загрузка файлов проекта
-    useEffect(() => {
-        const loadProjectFiles = async () => {
-            setIsLoading(true);
-            const files = await scanProjectFiles();
-            setProjectFiles(files);
-            generateNodesAndEdges(files);
-            setIsLoading(false);
-        };
+    // Навигация в папку
+    const navigateToFolder = useCallback((folderPath: string) => {
+        setCurrentPath(folderPath);
+        const pathParts = folderPath.split('/');
+        setBreadcrumbs(pathParts);
+        generateNodesForLevel(folderPath);
+    }, [generateNodesForLevel]);
 
-        loadProjectFiles();
-    }, [generateNodesAndEdges]);
+    // Навигация назад
+    const navigateBack = useCallback(() => {
+        if (breadcrumbs.length > 1) {
+            const newBreadcrumbs = breadcrumbs.slice(0, -1);
+            const newPath = newBreadcrumbs.join('/');
+            setBreadcrumbs(newBreadcrumbs);
+            setCurrentPath(newPath);
+            generateNodesForLevel(newPath);
+        }
+    }, [breadcrumbs, generateNodesForLevel]);
+
+    // Навигация по хлебным крошкам
+    const navigateToBreadcrumb = useCallback((index: number) => {
+        const newBreadcrumbs = breadcrumbs.slice(0, index + 1);
+        const newPath = newBreadcrumbs.join('/');
+        setBreadcrumbs(newBreadcrumbs);
+        setCurrentPath(newPath);
+        generateNodesForLevel(newPath);
+    }, [breadcrumbs, generateNodesForLevel]);
+
+    // Обработка кликов по узлам
+    const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+        if (node.data.type === 'folder') {
+            navigateToFolder(node.data.path);
+        }
+    }, [navigateToFolder]);
 
     const onConnect = useCallback(
         (params: Connection) => setEdges((eds) => addEdge(params, eds)),
         [setEdges]
     );
 
-    // Сохранение позиций
-    const saveLayout = useCallback(() => {
-        const positions = nodes.reduce((acc, node) => {
-            acc[node.id] = node.position;
-            return acc;
-        }, {} as Record<string, { x: number; y: number }>);
-
-        localStorage.setItem('project-visualizer-positions', JSON.stringify(positions));
-        localStorage.setItem('project-visualizer-hidden', JSON.stringify([...hiddenNodes]));
-
-        alert('Layout saved!');
-    }, [nodes, hiddenNodes]);
-
-    // Загрузка позиций
-    const loadLayout = useCallback(() => {
-        const savedPositions = localStorage.getItem('project-visualizer-positions');
-
-        if (savedPositions) {
-            const positions = JSON.parse(savedPositions);
-            setNodes((nds) =>
-                nds.map((node) => ({
-                    ...node,
-                    position: positions[node.id] || node.position,
-                }))
-            );
-        }
-    }, [setNodes]);
-
-    // Переобновление анализа
-    const refreshAnalysis = useCallback(async () => {
-        setIsLoading(true);
-        const files = await scanProjectFiles();
-        setProjectFiles(files);
-        generateNodesAndEdges(files);
-        setIsLoading(false);
-    }, [generateNodesAndEdges]);
-
-    // Скрытие/показ узла
-    const toggleNodeVisibility = useCallback((nodeId: string) => {
-        const newHidden = new Set(hiddenNodes);
-
-        if (newHidden.has(nodeId)) {
-            newHidden.delete(nodeId);
-            const nodeToShow = projectFiles.find(f => f.id === nodeId);
-            if (nodeToShow) {
-                const x = Math.random() * 400 + 100;
-                const y = Math.random() * 300 + 100;
-
-                const newNode: ProjectNode = {
-                    id: nodeToShow.id,
-                    type: 'default',
-                    position: { x, y },
-                    data: { ...nodeToShow, label: nodeToShow.name },
-                    style: {
-                        background: getNodeColor(nodeToShow.type),
-                        color: 'white',
-                        border: `2px solid ${getNodeColor(nodeToShow.type)}`,
-                        borderRadius: 8,
-                        fontSize: 12,
-                        fontWeight: 'bold',
-                    },
-                };
-
-                setNodes((nds) => [...nds, newNode]);
-            }
-        } else {
-            newHidden.add(nodeId);
-            setNodes((nds) => nds.filter(n => n.id !== nodeId));
-        }
-
-        setHiddenNodes(newHidden);
-    }, [hiddenNodes, projectFiles, setNodes]);
-
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-gray-900 text-white flex items-center justify-center">
-                <div className="text-center">
-                    <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-white mx-auto mb-4"></div>
-                    <p className="text-xl">Анализирую структуру проекта...</p>
-                </div>
-            </div>
-        );
-    }
+    // Инициализация
+    useEffect(() => {
+        generateNodesForLevel('app');
+    }, [generateNodesForLevel]);
 
     return (
         <div className="min-h-screen bg-gray-900 text-white">
@@ -295,78 +239,77 @@ export default function ProjectVisualizerPage() {
                 <h1 className="text-2xl font-bold mb-4">
                     Project Structure Visualizer
                     <span className="text-sm text-gray-400 ml-2">
-                        ({projectFiles.length} файлов найдено)
+                        (Навигация по уровням)
                     </span>
                 </h1>
 
+                {/* Хлебные крошки */}
+                <div className="mb-4">
+                    <div className="flex items-center space-x-2 text-sm">
+                        <span className="text-gray-400">Путь:</span>
+                        {breadcrumbs.map((crumb, index) => (
+                            <React.Fragment key={index}>
+                                <button
+                                    className={`px-2 py-1 rounded transition-colors ${
+                                        index === breadcrumbs.length - 1
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-gray-600 hover:bg-gray-500 text-gray-200'
+                                    }`}
+                                    onClick={() => navigateToBreadcrumb(index)}
+                                >
+                                    {crumb}
+                                </button>
+                                {index < breadcrumbs.length - 1 && (
+                                    <span className="text-gray-500">/</span>
+                                )}
+                            </React.Fragment>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Кнопки управления */}
                 <div className="space-x-2 mb-4">
                     <button
+                        className="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded transition-colors disabled:opacity-50"
+                        onClick={navigateBack}
+                        disabled={breadcrumbs.length <= 1}
+                    >
+                        ← Назад
+                    </button>
+                    <button
                         className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded transition-colors"
-                        onClick={refreshAnalysis}
+                        onClick={() => navigateToFolder('app')}
                     >
-                        🔄 Обновить анализ
-                    </button>
-                    <button
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                        onClick={saveLayout}
-                    >
-                        💾 Сохранить позиции
-                    </button>
-                    <button
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded transition-colors"
-                        onClick={loadLayout}
-                    >
-                        📂 Загрузить позиции
+                        🏠 В корень
                     </button>
                 </div>
 
-                {/* Легенда типов файлов */}
+                {/* Легенда */}
                 <div className="mb-4">
-                    <h3 className="text-sm font-semibold mb-2">Типы файлов:</h3>
+                    <h3 className="text-sm font-semibold mb-2">Легенда:</h3>
                     <div className="flex flex-wrap gap-3 text-sm">
                         <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded" style={{backgroundColor: getNodeColor('page')}}></div>
+                            <div className="w-4 h-4 rounded" style={{backgroundColor: '#FFA726'}}></div>
+                            <span>📁 Папки (кликабельны)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 rounded" style={{backgroundColor: getFileColor('page')}}></div>
                             <span>Pages</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded" style={{backgroundColor: getNodeColor('component')}}></div>
+                            <div className="w-4 h-4 rounded" style={{backgroundColor: getFileColor('component')}}></div>
                             <span>Components</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded" style={{backgroundColor: getNodeColor('hook')}}></div>
+                            <div className="w-4 h-4 rounded" style={{backgroundColor: getFileColor('hook')}}></div>
                             <span>Hooks</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded" style={{backgroundColor: getNodeColor('context')}}></div>
+                            <div className="w-4 h-4 rounded" style={{backgroundColor: getFileColor('context')}}></div>
                             <span>Context</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <div className="w-4 h-4 rounded" style={{backgroundColor: getNodeColor('types')}}></div>
-                            <span>Types</span>
                         </div>
                     </div>
                 </div>
-
-                {/* Скрытые файлы */}
-                {hiddenNodes.size > 0 && (
-                    <div className="mb-4">
-                        <h3 className="text-lg font-semibold mb-2">Скрытые файлы ({hiddenNodes.size}):</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {[...hiddenNodes].map(nodeId => {
-                                const file = projectFiles.find(f => f.id === nodeId);
-                                return file ? (
-                                    <button
-                                        key={nodeId}
-                                        className="px-3 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm transition-colors"
-                                        onClick={() => toggleNodeVisibility(nodeId)}
-                                    >
-                                        👁️ {file.name}
-                                    </button>
-                                ) : null;
-                            })}
-                        </div>
-                    </div>
-                )}
             </div>
 
             {/* React Flow Graph */}
@@ -377,17 +320,16 @@ export default function ProjectVisualizerPage() {
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
+                    onNodeClick={onNodeClick}
                     fitView
                     className="bg-gray-800"
-                    onNodeContextMenu={(event, node) => {
-                        event.preventDefault();
-                        toggleNodeVisibility(node.id);
-                    }}
                 >
                     <Controls className="bg-gray-700 border-gray-600" />
                     <MiniMap
                         className="bg-gray-700 border-gray-600"
-                        nodeColor={(node) => getNodeColor(node.data.type)}
+                        nodeColor={(node) =>
+                            node.data.type === 'folder' ? '#FFA726' : getFileColor(node.data.fileType)
+                        }
                     />
                     <Background
                         variant={BackgroundVariant.Dots}
@@ -399,7 +341,7 @@ export default function ProjectVisualizerPage() {
             </div>
 
             <div className="p-4 border-t border-gray-700 text-sm text-gray-400">
-                <p>💡 <strong>Tip:</strong> Перетаскивайте узлы • Правый клик чтобы скрыть • Колесо мыши для зума</p>
+                <p>💡 <strong>Совет:</strong> Кликните на 📁 папку чтобы войти в неё • Используйте хлебные крошки для быстрой навигации</p>
             </div>
         </div>
     );

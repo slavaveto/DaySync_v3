@@ -16,7 +16,7 @@ import {SyncData} from "@/app/init/sync/_syncData";
 import {UploadData} from "@/app/init/sync/_uploadData";
 import {CustomProgress} from "@/app/init/sync/CustomProgress";
 
-import {QuickNotes} from "@/app/common/QuickNotes";
+import {QuickNotes} from "@/app/main/common/QuickNotes";
 
 export default function Home() {
 
